@@ -1032,7 +1032,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
     private static String esc(String s) {
         if (s == null) return "";
-        return s.replace("\", "\\").replace(String.valueOf('"'), "\" + '"');
+        char bs = 92; char q = 34;
+        return s.replace(String.valueOf(bs), String.valueOf(bs)+bs).replace(String.valueOf(q), String.valueOf(bs)+q);
     }
 
     private void onLoadProfile() {
