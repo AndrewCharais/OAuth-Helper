@@ -37,6 +37,6 @@ jobs:
         with:
           name: "OAuth Helper v${{ steps.version.outputs.VERSION }}"
           files: build/libs/oauth-helper-*.jar
-          generate_release_notes: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
