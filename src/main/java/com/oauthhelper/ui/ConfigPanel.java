@@ -106,14 +106,17 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
         // Trash icon via char code to avoid file encoding issues
         // ── [ + New Profile ] above the list ──────────────────────────────
+        // ── Full-width [ + New Profile ] button ──────────────────────────────
         JButton btnNew = new JButton("+ New Profile");
+        btnNew.setMargin(new Insets(3, 4, 3, 4));
         btnNew.addActionListener(e -> onAdd());
-        JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
+        JPanel topBtns = new JPanel(new BorderLayout());
         topBtns.setOpaque(false);
-        topBtns.add(btnNew);
+        topBtns.setBorder(new EmptyBorder(0, 0, 3, 0));
+        topBtns.add(btnNew, BorderLayout.CENTER);
         left.add(topBtns, BorderLayout.NORTH);
 
-        // ── Profile list ────────────────────────────────────────────────────
+        // ── Profile list ─────────────────────────────────────────────────────
         profileList.setFixedCellHeight(22);
         profileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         profileList.addListSelectionListener(e -> {
@@ -123,9 +126,13 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         listScroll.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
         left.add(listScroll, BorderLayout.CENTER);
 
-        JButton btnImport = smallBtn("Import");
-        JButton btnExport = smallBtn("Export");
-        JButton btnDel    = smallBtn("Delete");
+        // ── Three equal-width buttons spanning the full panel width ───────────
+        JButton btnImport = new JButton("Import");
+        JButton btnExport = new JButton("Export");
+        JButton btnDel    = new JButton("Delete");
+        for (JButton b : new JButton[]{btnImport, btnExport, btnDel}) {
+            b.setMargin(new Insets(2, 2, 2, 2));
+        }
         btnImport.addActionListener(e -> onLoadProfile());
         btnExport.addActionListener(e -> onExportProfile());
         btnDel.addActionListener(e -> onDelete());
@@ -133,18 +140,12 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         profileList.addListSelectionListener(ev -> {
             btnDel.setEnabled(profileList.getSelectedValue() != null);
         });
-        JPanel impExpRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        impExpRow.setOpaque(false);
-        impExpRow.add(btnImport);
-        impExpRow.add(btnExport);
-        JPanel delRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        delRow.setOpaque(false);
-        delRow.add(btnDel);
-        JPanel southBtns = new JPanel();
-        southBtns.setLayout(new BoxLayout(southBtns, BoxLayout.Y_AXIS));
+        JPanel southBtns = new JPanel(new GridLayout(1, 3, 2, 0));
         southBtns.setOpaque(false);
-        southBtns.add(impExpRow);
-        southBtns.add(delRow);
+        southBtns.setBorder(new EmptyBorder(3, 0, 0, 0));
+        southBtns.add(btnImport);
+        southBtns.add(btnExport);
+        southBtns.add(btnDel);
         left.add(southBtns, BorderLayout.SOUTH);
 
         // ── Right: card layout ────────────────────────────────────────────────
