@@ -52,7 +52,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JCheckBox chkInjectProxy, chkInjectRepeater, chkInjectIntruder, chkInjectScanner;
     private JTextField tfHeaderName, tfTokenPrefix;
 
-    private JCheckBox  chkScanEnabled, chkRegenEnabled;
     private JSpinner   spRegenThreshold;
     private JTextField tfScanCodes, tfSessionPhrase;
 
@@ -60,7 +59,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JPanel pnlInjectionBody;
     private JPanel pnlInjectionTools;
     private JPanel pnlMonitorBody;
-    private JPanel pnlRegenRow;
     private JLabel lblScopesLabel;
 
     private JButton  btnFetch, btnTest, btnCopy, btnStopRefresh, btnSave;
@@ -106,42 +104,54 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         left.setPreferredSize(new Dimension(160, 0));
         left.setBorder(new EmptyBorder(8, 8, 8, 4));
 
-        JLabel hdr = new JLabel("Profiles");
-        hdr.setFont(burpBold());
-        hdr.setForeground(SECTION_FG);
-        hdr.setBorder(new EmptyBorder(0, 0, 3, 0));
-        left.add(hdr, BorderLayout.NORTH);
+        // Trash icon via char code to avoid file encoding issues
+        final String TRASH = String.valueOf((char)0x1F5D1);
 
-        profileList.setFixedCellHeight(22);
+        // [ + New Profile ] [ Import ] [ Export ] above the list
+        JButton btnNew    = new JButton("+ New Profile");
+        JButton btnImport = smallBtn("Import");
+        JButton btnExport = smallBtn("Export");
+        btnNew.addActionListener(e -> onAdd());
+        btnImport.addActionListener(e -> onLoadProfile());
+        btnExport.addActionListener(e -> onExportProfile());
+        JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        topBtns.setOpaque(false);
+        topBtns.add(btnNew);
+        topBtns.add(btnImport);
+        topBtns.add(btnExport);
+        left.add(topBtns, BorderLayout.NORTH);
+
+        // Profile list — each row shows name + trash icon on the right
+        profileList.setFixedCellHeight(24);
         profileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         profileList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) onSelect(profileList.getSelectedValue());
         });
+        profileList.setCellRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value,
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel lbl = (JLabel) super.getListCellRendererComponent(
+                        list, value, index, isSelected, cellHasFocus);
+                lbl.setText(value == null ? "" : value.toString() + "  " + TRASH);
+                return lbl;
+            }
+        });
+        // Click in the right ~28px of a row to delete
+        profileList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                int idx = profileList.locationToIndex(e.getPoint());
+                if (idx < 0) return;
+                java.awt.Rectangle cell = profileList.getCellBounds(idx, idx);
+                if (cell != null && e.getX() > cell.x + cell.width - 28) {
+                    profileList.setSelectedIndex(idx);
+                    onDelete();
+                }
+            }
+        });
         JScrollPane listScroll = new JScrollPane(profileList);
         listScroll.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
         left.add(listScroll, BorderLayout.CENTER);
-
-        JButton btnNew      = smallBtn("New");
-        JButton btnImport   = smallBtn("Import");
-        JButton btnExport   = smallBtn("Export");
-        JButton btnDel      = smallBtn("Delete");
-        btnNew.addActionListener(e -> onAdd());
-        btnImport.addActionListener(e -> onLoadProfile());
-        btnExport.addActionListener(e -> onExportProfile());
-        btnDel.addActionListener(e -> onDelete());
-        // Two rows: New | Import | Export on top, Delete below
-        JPanel btnsTop = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
-        btnsTop.setOpaque(false);
-        btnsTop.add(btnNew); btnsTop.add(btnImport); btnsTop.add(btnExport);
-        JPanel btnsBot = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        btnsBot.setOpaque(false);
-        btnsBot.add(btnDel);
-        JPanel btns = new JPanel();
-        btns.setLayout(new BoxLayout(btns, BoxLayout.Y_AXIS));
-        btns.setOpaque(false);
-        btns.add(btnsTop);
-        btns.add(btnsBot);
-        left.add(btns, BorderLayout.SOUTH);
 
         // ── Right: card layout ────────────────────────────────────────────────
         JLabel emptyLbl = new JLabel("Select or create a profile to begin.", SwingConstants.CENTER);
@@ -199,14 +209,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         for (JCheckBox c : new JCheckBox[]{chkInjectProxy, chkInjectRepeater,
                                            chkInjectIntruder, chkInjectScanner})
             c.addActionListener(toolToggle);
-
-        chkScanEnabled  = chk("Monitor responses for authentication failures");
-        chkScanEnabled.setToolTipText(
-                "Watches in-scope HTTP responses for signs that your token is no longer valid.");
-        chkRegenEnabled = chk("Automatically fetch a new token");
-        chkRegenEnabled.setToolTipText(
-                "When enough failures are detected, automatically request a new token.");
-        chkRegenEnabled.addActionListener(e -> updateVisibility());
 
         spRegenThreshold = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
 
@@ -301,20 +303,12 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
             pnlMonitorBody.setLayout(new BoxLayout(pnlMonitorBody, BoxLayout.Y_AXIS));
             pnlMonitorBody.setOpaque(false);
 
-            pnlMonitorBody.add(inlineRow(chkScanEnabled));
             pnlMonitorBody.add(row("Failure Status Codes", tfScanCodes,
-                    "Comma-separated HTTP status codes that indicate authentication failure. Example: 401, 403."));
+                    "Comma-separated HTTP status codes that indicate authentication failure (e.g. 401, 403). Leave blank to disable."));
             pnlMonitorBody.add(row("Failure Response Text (optional)", tfSessionPhrase,
                     "If this text appears in a response body, it will be treated as a session failure. Leave blank to disable."));
-            pnlMonitorBody.add(vGap(4));
-            pnlMonitorBody.add(inlineRow(chkRegenEnabled));
-
-            pnlRegenRow = new JPanel();
-            pnlRegenRow.setLayout(new BoxLayout(pnlRegenRow, BoxLayout.Y_AXIS));
-            pnlRegenRow.setOpaque(false);
-            pnlRegenRow.add(row("Failures Before Refresh", spRegenThreshold,
-                    "Number of failures detected before automatically requesting a new token."));
-            pnlMonitorBody.add(pnlRegenRow);
+            pnlMonitorBody.add(row("Failures Before Refresh", spRegenThreshold,
+                    "Number of consecutive failures before automatically requesting a new token."));
 
             return pnlMonitorBody;
         });
@@ -639,7 +633,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         rowPrivateKey.setVisible(isJwt);
         if (rowRefreshMode != null) rowRefreshMode.setVisible(true);
         if (pnlInjectionTools != null) pnlInjectionTools.setVisible(anyInject);
-        if (pnlRegenRow != null) pnlRegenRow.setVisible(chkRegenEnabled.isSelected());
         if (lblScopesLabel != null) lblScopesLabel.setText("Scopes (optional)");
 
         updateStopRefreshButton();
@@ -709,8 +702,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         cbGrant.setSelectedItem(p.getGrantType());
         cbAuth.setSelectedItem(p.getClientAuthMethod());
         cbRefresh.setSelectedIndex(modeToIndex(p.getRefreshMode()));
-        chkScanEnabled.setSelected(p.isScanEnabled());
-        chkRegenEnabled.setSelected(p.isRegenEnabled());
         spRegenThreshold.setValue(p.getRegenThreshold());
 
         String codes = p.getScanCodes();
@@ -743,12 +734,12 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         p.setInjectIntruder(chkInjectIntruder.isSelected());
         p.setInjectScanner(chkInjectScanner.isSelected());
         p.setRefreshMode(indexToMode(cbRefresh.getSelectedIndex()));
-        p.setScanEnabled(chkScanEnabled.isSelected());
+        p.setScanEnabled(!tfScanCodes.getForeground().equals(Color.GRAY) || !tfSessionPhrase.getForeground().equals(Color.GRAY));
         String rawCodes = tfScanCodes.getText().trim();
         p.setScanCodes(tfScanCodes.getForeground().equals(Color.GRAY) ? "401, 403" : rawCodes);
         String rawPhrase = tfSessionPhrase.getText().trim();
         p.setSessionPhrase(tfSessionPhrase.getForeground().equals(Color.GRAY) ? "" : rawPhrase);
-        p.setRegenEnabled(chkRegenEnabled.isSelected());
+        p.setRegenEnabled(true);
         p.setRegenThreshold((Integer) spRegenThreshold.getValue());
 
         int idx = profileModel.indexOf(p);
@@ -996,44 +987,42 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     }
 
     private static String profileToJson(OAuthProfile p) {
-        // Build JSON without any escaped quote characters in string literals
-        // to avoid corruption when copying through text editors or web UIs.
-        String q  = String.valueOf('"');
-        String nl = System.lineSeparator();
+        String q  = String.valueOf((char)34);
+        String nl = String.valueOf((char)10);
         String co = ",";
-
         StringBuilder j = new StringBuilder("{" + nl);
-        j.append(field(q, "name",              q + esc(p.getName())                      + q, true,  nl));
-        j.append(field(q, "grantType",         q + esc(p.getGrantType().name())          + q, true,  nl));
-        j.append(field(q, "clientAuthMethod",  q + esc(p.getClientAuthMethod().name())   + q, true,  nl));
-        j.append(field(q, "tokenUrl",          q + esc(p.getTokenUrl())                  + q, true,  nl));
-        j.append(field(q, "clientId",          q + esc(p.getClientId())                  + q, true,  nl));
-        j.append(field(q, "clientSecret",      q + esc(p.getClientSecret())              + q, true,  nl));
-        j.append(field(q, "scopes",            q + esc(p.getScopes())                    + q, true,  nl));
-        j.append(field(q, "headerName",        q + esc(p.getHeaderName())                + q, true,  nl));
-        j.append(field(q, "tokenPrefix",       q + esc(p.getTokenPrefix())               + q, true,  nl));
-        j.append(field(q, "injectProxy",       String.valueOf(p.isInjectProxy()),            true,  nl));
-        j.append(field(q, "injectRepeater",    String.valueOf(p.isInjectRepeater()),          true,  nl));
-        j.append(field(q, "injectIntruder",    String.valueOf(p.isInjectIntruder()),          true,  nl));
-        j.append(field(q, "injectScanner",     String.valueOf(p.isInjectScanner()),           true,  nl));
-        j.append(field(q, "refreshMode",       q + esc(p.getRefreshMode().name())        + q, true,  nl));
-        j.append(field(q, "scanEnabled",       String.valueOf(p.isScanEnabled()),             true,  nl));
-        j.append(field(q, "scanCodes",         q + esc(p.getScanCodes())                 + q, true,  nl));
-        j.append(field(q, "sessionPhrase",     q + esc(p.getSessionPhrase())             + q, true,  nl));
-        j.append(field(q, "regenEnabled",      String.valueOf(p.isRegenEnabled()),            true,  nl));
-        j.append(field(q, "regenThreshold",    String.valueOf(p.getRegenThreshold()),         false, nl));
+        j.append(jfield(q, "name",             q + esc(p.getName())                      + q, true,  nl));
+        j.append(jfield(q, "grantType",        q + esc(p.getGrantType().name())          + q, true,  nl));
+        j.append(jfield(q, "clientAuthMethod", q + esc(p.getClientAuthMethod().name())   + q, true,  nl));
+        j.append(jfield(q, "tokenUrl",         q + esc(p.getTokenUrl())                  + q, true,  nl));
+        j.append(jfield(q, "clientId",         q + esc(p.getClientId())                  + q, true,  nl));
+        j.append(jfield(q, "clientSecret",     q + esc(p.getClientSecret())              + q, true,  nl));
+        j.append(jfield(q, "scopes",           q + esc(p.getScopes())                    + q, true,  nl));
+        j.append(jfield(q, "headerName",       q + esc(p.getHeaderName())                + q, true,  nl));
+        j.append(jfield(q, "tokenPrefix",      q + esc(p.getTokenPrefix())               + q, true,  nl));
+        j.append(jfield(q, "injectProxy",      String.valueOf(p.isInjectProxy()),            true,  nl));
+        j.append(jfield(q, "injectRepeater",   String.valueOf(p.isInjectRepeater()),          true,  nl));
+        j.append(jfield(q, "injectIntruder",   String.valueOf(p.isInjectIntruder()),          true,  nl));
+        j.append(jfield(q, "injectScanner",    String.valueOf(p.isInjectScanner()),           true,  nl));
+        j.append(jfield(q, "refreshMode",      q + esc(p.getRefreshMode().name())        + q, true,  nl));
+        j.append(jfield(q, "scanEnabled",      String.valueOf(p.isScanEnabled()),             true,  nl));
+        j.append(jfield(q, "scanCodes",        q + esc(p.getScanCodes())                 + q, true,  nl));
+        j.append(jfield(q, "sessionPhrase",    q + esc(p.getSessionPhrase())             + q, true,  nl));
+        j.append(jfield(q, "regenEnabled",     String.valueOf(p.isRegenEnabled()),            true,  nl));
+        j.append(jfield(q, "regenThreshold",   String.valueOf(p.getRegenThreshold()),         false, nl));
         j.append("}");
         return j.toString();
     }
 
-    private static String field(String q, String key, String val, boolean comma, String nl) {
+    private static String jfield(String q, String key, String val, boolean comma, String nl) {
         return "  " + q + key + q + ": " + val + (comma ? "," : "") + nl;
     }
 
     private static String esc(String s) {
         if (s == null) return "";
-        char bs = 92; char q = 34;
-        return s.replace(String.valueOf(bs), String.valueOf(bs)+bs).replace(String.valueOf(q), String.valueOf(bs)+q);
+        char bs = 92; char dq = 34;
+        return s.replace(String.valueOf(bs), String.valueOf(bs) + bs)
+                .replace(String.valueOf(dq), String.valueOf(bs) + dq);
     }
 
     private void onLoadProfile() {
