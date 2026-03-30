@@ -5,10 +5,14 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build JAR and publish release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -19,6 +23,7 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -26,7 +31,7 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build JAR
-        run: gradle jar
+        run: gradle jar --no-daemon
 
       - name: Get version from tag
         id: version
