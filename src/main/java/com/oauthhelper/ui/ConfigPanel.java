@@ -105,53 +105,47 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         left.setBorder(new EmptyBorder(8, 8, 8, 4));
 
         // Trash icon via char code to avoid file encoding issues
-        final String TRASH = String.valueOf((char)0x1F5D1);
-
-        // [ + New Profile ] [ Import ] [ Export ] above the list
-        JButton btnNew    = new JButton("+ New Profile");
-        JButton btnImport = smallBtn("Import");
-        JButton btnExport = smallBtn("Export");
+        // ── [ + New Profile ] above the list ──────────────────────────────
+        JButton btnNew = new JButton("+ New Profile");
         btnNew.addActionListener(e -> onAdd());
-        btnImport.addActionListener(e -> onLoadProfile());
-        btnExport.addActionListener(e -> onExportProfile());
-        JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 2));
+        JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 2));
         topBtns.setOpaque(false);
         topBtns.add(btnNew);
-        topBtns.add(btnImport);
-        topBtns.add(btnExport);
         left.add(topBtns, BorderLayout.NORTH);
 
-        // Profile list — each row shows name + trash icon on the right
-        profileList.setFixedCellHeight(24);
+        // ── Profile list ────────────────────────────────────────────────────
+        profileList.setFixedCellHeight(22);
         profileList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         profileList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) onSelect(profileList.getSelectedValue());
         });
-        profileList.setCellRenderer(new javax.swing.DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value,
-                    int index, boolean isSelected, boolean cellHasFocus) {
-                JLabel lbl = (JLabel) super.getListCellRendererComponent(
-                        list, value, index, isSelected, cellHasFocus);
-                lbl.setText(value == null ? "" : value.toString() + "  " + TRASH);
-                return lbl;
-            }
-        });
-        // Click in the right ~28px of a row to delete
-        profileList.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                int idx = profileList.locationToIndex(e.getPoint());
-                if (idx < 0) return;
-                java.awt.Rectangle cell = profileList.getCellBounds(idx, idx);
-                if (cell != null && e.getX() > cell.x + cell.width - 28) {
-                    profileList.setSelectedIndex(idx);
-                    onDelete();
-                }
-            }
-        });
         JScrollPane listScroll = new JScrollPane(profileList);
         listScroll.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
         left.add(listScroll, BorderLayout.CENTER);
+
+        JButton btnImport = smallBtn("Import");
+        JButton btnExport = smallBtn("Export");
+        JButton btnDel    = smallBtn("Delete");
+        btnImport.addActionListener(e -> onLoadProfile());
+        btnExport.addActionListener(e -> onExportProfile());
+        btnDel.addActionListener(e -> onDelete());
+        btnDel.setEnabled(false);
+        profileList.addListSelectionListener(ev -> {
+            btnDel.setEnabled(profileList.getSelectedValue() != null);
+        });
+        JPanel impExpRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        impExpRow.setOpaque(false);
+        impExpRow.add(btnImport);
+        impExpRow.add(btnExport);
+        JPanel delRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        delRow.setOpaque(false);
+        delRow.add(btnDel);
+        JPanel southBtns = new JPanel();
+        southBtns.setLayout(new BoxLayout(southBtns, BoxLayout.Y_AXIS));
+        southBtns.setOpaque(false);
+        southBtns.add(impExpRow);
+        southBtns.add(delRow);
+        left.add(southBtns, BorderLayout.SOUTH);
 
         // ── Right: card layout ────────────────────────────────────────────────
         JLabel emptyLbl = new JLabel("Select or create a profile to begin.", SwingConstants.CENTER);
@@ -493,15 +487,21 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         fc.fill = GridBagConstraints.HORIZONTAL; fc.weightx = 1.0;
         p.add(input, fc);
 
+        // Always add the icon column so all input fields end at the same x position.
+        // When there is no tooltip, add an invisible placeholder of the same width.
+        GridBagConstraints ic = new GridBagConstraints();
+        ic.gridx = 2; ic.gridy = 0; ic.anchor = GridBagConstraints.WEST;
+        ic.fill = GridBagConstraints.NONE; ic.insets = new Insets(0, 5, 0, 0);
         if (tooltip != null) {
-            GridBagConstraints ic = new GridBagConstraints();
-            ic.gridx = 2; ic.gridy = 0; ic.anchor = GridBagConstraints.WEST;
-            ic.fill = GridBagConstraints.NONE; ic.insets = new Insets(0, 5, 0, 0);
             JLabel icon = new JLabel("\u24d8");
             icon.setForeground(new Color(100, 140, 200));
             icon.setToolTipText(tooltip);
             icon.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             p.add(icon, ic);
+        } else {
+            JLabel spacer = new JLabel("\u24d8");
+            spacer.setForeground(new Color(0, 0, 0, 0)); // fully transparent
+            p.add(spacer, ic);
         }
         return p;
     }
@@ -528,15 +528,19 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         fc.fill = GridBagConstraints.HORIZONTAL; fc.weightx = 1.0;
         p.add(input, fc);
 
+        GridBagConstraints ic = new GridBagConstraints();
+        ic.gridx = 2; ic.gridy = 0; ic.anchor = GridBagConstraints.WEST;
+        ic.insets = new Insets(0, 5, 0, 0);
         if (tooltip != null) {
-            GridBagConstraints ic = new GridBagConstraints();
-            ic.gridx = 2; ic.gridy = 0; ic.anchor = GridBagConstraints.WEST;
-            ic.insets = new Insets(0, 5, 0, 0);
             JLabel icon = new JLabel("\u24d8");
             icon.setForeground(new Color(100, 140, 200));
             icon.setToolTipText(tooltip);
             icon.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             p.add(icon, ic);
+        } else {
+            JLabel spacer = new JLabel("\u24d8");
+            spacer.setForeground(new Color(0, 0, 0, 0));
+            p.add(spacer, ic);
         }
         return p;
     }
