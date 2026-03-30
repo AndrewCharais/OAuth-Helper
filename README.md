@@ -169,8 +169,7 @@ Profiles can be saved as JSON files and shared between users or engagements.
 ## Roadmap
 
 - [ ] Authorization Code + PKCE flow
-- [ ] Scope-based injection rules (inject different tokens for different URL patterns)
-- [ ] OAuth security testing checks (state parameter validation, redirect_uri manipulation, token audience bypass)
+- [ ] OAuth security testing checks (state parameter validation, redirect_uri manipulation, token audience bypass, etc.)
 
 ---
 
