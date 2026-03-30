@@ -38,6 +38,7 @@ public class OAuthClient {
         StringBuilder body = new StringBuilder("grant_type=client_credentials");
         appendScopes(body, profile);
         appendClientAuth(body, profile);
+        api.logging().logToOutput("[OAuth Helper] Token request body: " + body);
         return post(profile, body.toString());
     }
 
@@ -157,8 +158,11 @@ public class OAuthClient {
                     .append(enc("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"));
                 body.append("&client_assertion=").append(enc(buildJwt(profile)));
             }
-            case HTTP_BASIC ->
-                body.append("&client_id=").append(enc(profile.getClientId()));
+            case HTTP_BASIC -> {
+                // Credentials are in the Authorization: Basic header (built in post()).
+                // RFC 6749 §2.3.1: client MUST NOT send credentials in the request body
+                // when using HTTP Basic authentication.
+            }
         }
     }
 
