@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled output (JAR released via GitHub Releases, not committed to repo)
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
