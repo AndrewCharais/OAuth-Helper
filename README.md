@@ -2,12 +2,10 @@
 
 A Burp Suite extension that automates OAuth 2.0 token generation and injects tokens into in-scope HTTP traffic across all Burp tools.
 
-Built with the [Montoya API](https://portswigger.github.io/burp-extensions-montoya-api/).
----
+#### Author
 
-## Built With
-
-This extension was built by Andrew Charais with AI assistance.
+Andrew Charais  
+Built with the help of AI-assisted development tools.
 
 ---
 
