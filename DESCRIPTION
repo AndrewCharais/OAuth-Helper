@@ -1,0 +1,1 @@
+Burp Suite extension that automates OAuth 2.0 token generation and injects tokens into in-scope traffic across Proxy, Repeater, Intruder, and Scanner.
