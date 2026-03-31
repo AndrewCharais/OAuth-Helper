@@ -200,6 +200,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         spJwtLifetime = new JSpinner(new SpinnerNumberModel(300, 30, 3600, 30));
 
         cbRefresh = new JComboBox<>(REFRESH_LABELS);
+        cbRefresh.setSelectedIndex(1); // default to Auto-Refresh
         cbRefresh.addActionListener(e -> updateVisibility());
 
         chkInjectProxy    = chk("Proxy");
@@ -289,13 +290,14 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         form.add(rowWithLabel(lblScopesLabel, tfScopes,
                 "Space-separated OAuth scopes (e.g. openid profile). Leave blank for server defaults."));
 
-        // ── TOKEN INJECTION (collapsible) ─────────────────────────────────────
+        // ── ADVANCED SETTINGS (collapsible) ───────────────────────────────────
         form.add(vGap(6));
-        JPanel injectionSection = collapsibleSection("Apply Token to Selected Tools", false, () -> {
-            pnlInjectionBody = new JPanel();
-            pnlInjectionBody.setLayout(new BoxLayout(pnlInjectionBody, BoxLayout.Y_AXIS));
-            pnlInjectionBody.setOpaque(false);
+        JPanel advancedSection = collapsibleSection("Advanced Settings", false, () -> {
+            JPanel body = new JPanel();
+            body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+            body.setOpaque(false);
 
+            // Apply Token to Selected Tools
             JPanel toolRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
             toolRow.setOpaque(false);
             toolRow.add(chkInjectProxy);
@@ -305,8 +307,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
             toolRow.add(chkInjectIntruder);
             toolRow.add(Box.createHorizontalStrut(12));
             toolRow.add(chkInjectScanner);
-            JPanel toolRowWrap = stretchy(toolRow, 26);
-            pnlInjectionBody.add(toolRowWrap);
+            body.add(stretchy(toolRow, 26));
 
             pnlInjectionTools = new JPanel();
             pnlInjectionTools.setLayout(new BoxLayout(pnlInjectionTools, BoxLayout.Y_AXIS));
@@ -315,39 +316,30 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
                     "The HTTP request header the token is written into."));
             pnlInjectionTools.add(row("Token Prefix", tfTokenPrefix,
                     "Text prepended before the token value (e.g. Bearer). Leave blank to inject the raw token."));
-            pnlInjectionBody.add(pnlInjectionTools);
+            body.add(pnlInjectionTools);
 
-            return pnlInjectionBody;
-        });
-        form.add(injectionSection);
+            body.add(vGap(6));
 
-        // ── SESSION MONITORING (collapsible) ──────────────────────────────────
-        form.add(vGap(4));
-        JPanel monitorSection = collapsibleSection("Session Monitoring", false, () -> {
+            // Token Refresh Mode (no header — continuation of above settings)
+            rowRefreshMode = row("Token Refresh Mode", cbRefresh,
+                    "Manual: click Get Token when needed. Auto-Refresh: automatically gets a new token when the current one expires.");
+            body.add(rowRefreshMode);
+
+            body.add(vGap(6));
+
+            // Session Monitoring (separate header since it's a different concern)
+            body.add(sectionLabel("Session Monitoring"));
             pnlMonitorBody = new JPanel();
             pnlMonitorBody.setLayout(new BoxLayout(pnlMonitorBody, BoxLayout.Y_AXIS));
             pnlMonitorBody.setOpaque(false);
-
             pnlMonitorBody.add(row("Failure Status Codes", tfScanCodes,
                     "Comma-separated HTTP status codes that indicate authentication failure (e.g. 401, 403). Leave blank to disable."));
             pnlMonitorBody.add(row("Failure Response Text (optional)", tfSessionPhrase,
                     "If this text appears in a response body, it will be treated as a session failure. Leave blank to disable."));
             pnlMonitorBody.add(row("Failures Before Refresh", spRegenThreshold,
                     "Number of consecutive failures before automatically requesting a new token."));
+            body.add(pnlMonitorBody);
 
-            return pnlMonitorBody;
-        });
-        form.add(monitorSection);
-
-        // ── ADVANCED SETTINGS (collapsible) ───────────────────────────────────
-        form.add(vGap(4));
-        JPanel advancedSection = collapsibleSection("Advanced Settings", false, () -> {
-            JPanel body = new JPanel();
-            body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
-            body.setOpaque(false);
-            rowRefreshMode = row("Token Refresh Mode", cbRefresh,
-                    "Manual: click Get Token when needed. Auto-Refresh: automatically gets a new token when the current one expires.");
-            body.add(rowRefreshMode);
             return body;
         });
         form.add(advancedSection);
