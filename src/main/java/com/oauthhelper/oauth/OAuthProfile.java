@@ -18,6 +18,16 @@ public class OAuthProfile {
         AUTO_SILENT
     }
 
+    /**
+     * Signing algorithms supported for Private Key JWT assertions.
+     * RS* = RSA-based (PKCS#8 RSA private key required).
+     * ES* = EC-based  (PKCS#8 EC private key required).
+     */
+    public enum JwtAlgorithm {
+        RS256, RS384, RS512,
+        ES256, ES384
+    }
+
     private String name = "New Profile";
     private GrantType grantType = GrantType.CLIENT_CREDENTIALS;
     private ClientAuthMethod clientAuthMethod = ClientAuthMethod.HTTP_BASIC;
@@ -26,7 +36,9 @@ public class OAuthProfile {
     private String clientId = "";
     private String clientSecret = "";
     private String privateKeyPem = "";
-    private String jwtAlgorithm = "RS256";
+    private JwtAlgorithm jwtAlgorithm      = JwtAlgorithm.RS256;
+    private String       jwtAudience       = "";  // defaults to token URL if blank
+    private int          jwtLifetimeSeconds = 300; // assertion exp window, 5 min default
     private String scopes = "";
 
     // Per-tool injection toggles — all on by default
@@ -42,14 +54,14 @@ public class OAuthProfile {
     private boolean replaceIfPresent = true;
 
     // Token header scanning / auto-regen
-    private boolean scanEnabled     = true;  // watch in-scope responses for session termination
-    private String  scanCodes       = "401, 403"; // comma-separated HTTP status codes to watch
-    private String  sessionPhrase   = "";     // optional body phrase indicating session terminated
-    private boolean regenEnabled    = true;  // auto re-fetch when threshold hit
-    private int     regenThreshold  = 3;     // consecutive hits before regen
+    private boolean scanEnabled    = true;
+    private String  scanCodes      = "401, 403";
+    private String  sessionPhrase  = "";
+    private boolean regenEnabled   = true;
+    private int     regenThreshold = 3;
 
     // Refresh
-    private RefreshMode refreshMode        = RefreshMode.MANUAL;
+    private RefreshMode refreshMode          = RefreshMode.MANUAL;
     private int         refreshBufferSeconds = 300;
 
     public OAuthProfile(String name) { this.name = name; }
@@ -60,7 +72,7 @@ public class OAuthProfile {
     public void   setName(String v)                { this.name = v; }
     public GrantType getGrantType()                { return grantType; }
     public void      setGrantType(GrantType v)     { this.grantType = v; }
-    public ClientAuthMethod getClientAuthMethod()          { return clientAuthMethod; }
+    public ClientAuthMethod getClientAuthMethod()              { return clientAuthMethod; }
     public void             setClientAuthMethod(ClientAuthMethod v) { this.clientAuthMethod = v; }
     public String getTokenUrl()                    { return tokenUrl; }
     public void   setTokenUrl(String v)            { this.tokenUrl = v; }
@@ -72,8 +84,12 @@ public class OAuthProfile {
     public void   setClientSecret(String v)        { this.clientSecret = v; }
     public String getPrivateKeyPem()               { return privateKeyPem; }
     public void   setPrivateKeyPem(String v)       { this.privateKeyPem = v; }
-    public String getJwtAlgorithm()                { return jwtAlgorithm; }
-    public void   setJwtAlgorithm(String v)        { this.jwtAlgorithm = v; }
+    public JwtAlgorithm getJwtAlgorithm()          { return jwtAlgorithm; }
+    public void         setJwtAlgorithm(JwtAlgorithm v) { this.jwtAlgorithm = v; }
+    public String getJwtAudience()                 { return jwtAudience; }
+    public void   setJwtAudience(String v)         { this.jwtAudience = v; }
+    public int    getJwtLifetimeSeconds()          { return jwtLifetimeSeconds; }
+    public void   setJwtLifetimeSeconds(int v)     { this.jwtLifetimeSeconds = v; }
     public String getScopes()                      { return scopes; }
     public void   setScopes(String v)              { this.scopes = v; }
 
@@ -86,7 +102,6 @@ public class OAuthProfile {
     public boolean isInjectScanner()               { return injectScanner; }
     public void    setInjectScanner(boolean v)     { this.injectScanner = v; }
 
-    /** True if injection is enabled for at least one tool. */
     public boolean isAnyInjectionEnabled() {
         return injectProxy || injectRepeater || injectIntruder || injectScanner;
     }
@@ -105,14 +120,13 @@ public class OAuthProfile {
     public int  getRefreshBufferSeconds()          { return refreshBufferSeconds; }
     public void setRefreshBufferSeconds(int v)     { this.refreshBufferSeconds = v; }
 
-    public boolean isScanEnabled()               { return scanEnabled; }
+    public boolean isScanEnabled()                 { return scanEnabled; }
     public void    setScanEnabled(boolean v)       { this.scanEnabled = v; }
-    public String  getScanCodes()                { return scanCodes; }
+    public String  getScanCodes()                  { return scanCodes; }
     public void    setScanCodes(String v)          { this.scanCodes = v; }
-    public String  getSessionPhrase()            { return sessionPhrase; }
+    public String  getSessionPhrase()              { return sessionPhrase; }
     public void    setSessionPhrase(String v)      { this.sessionPhrase = v; }
 
-    /** Parse scanCodes into a set of integers, ignoring invalid entries. */
     public java.util.Set<Integer> parsedScanCodes() {
         java.util.Set<Integer> codes = new java.util.HashSet<>();
         if (scanCodes == null || scanCodes.isBlank()) { codes.add(401); codes.add(403); return codes; }
@@ -122,11 +136,11 @@ public class OAuthProfile {
         }
         return codes;
     }
-    public boolean isRegenEnabled()              { return regenEnabled; }
+
+    public boolean isRegenEnabled()               { return regenEnabled; }
     public void    setRegenEnabled(boolean v)      { this.regenEnabled = v; }
     public int     getRegenThreshold()             { return regenThreshold; }
     public void    setRegenThreshold(int v)        { this.regenThreshold = v; }
 
-    @Override
-    public String toString() { return name; }
+    @Override public String toString() { return name; }
 }
