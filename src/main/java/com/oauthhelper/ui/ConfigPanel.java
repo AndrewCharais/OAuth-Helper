@@ -44,7 +44,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JPanel formPanel;
 
     private JTextField    tfName, tfTokenUrl, tfClientId, tfScopes, tfJwtAudience;
-    private JPasswordField pfSecret, pfPrivateKey;
+    private JPasswordField pfSecret;
+    private JTextArea        taPrivateKey;
     private JComboBox<OAuthProfile.JwtAlgorithm> cbJwtAlgorithm;
     private JSpinner spJwtLifetime;
     private JComboBox<OAuthProfile.GrantType>        cbGrant;
@@ -218,7 +219,11 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         tfTokenUrl      = field();
         tfClientId      = field();
         pfSecret        = pwField();
-        pfPrivateKey    = pwField();
+        pfSecret.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        taPrivateKey = new JTextArea(4, 30);
+        taPrivateKey.setLineWrap(true);
+        taPrivateKey.setWrapStyleWord(false);
+        taPrivateKey.setFont(burpMono());
         tfJwtAudience   = field();
         tfScopes        = field();
         tfHeaderName    = new JTextField("Authorization");
@@ -257,9 +262,16 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         form.add(row("Client ID", tfClientId));
         form.add(row("Authentication Method", cbAuth));
         rowSecret    = row("Client Secret",    pfSecret);
-        rowPrivateKey = row("Private Key (PEM)", pfPrivateKey);
+        // Private key needs a scrollable text area — PEM keys are multi-line
+        JScrollPane privateKeyScroll = new JScrollPane(taPrivateKey);
+        privateKeyScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 80));
+        privateKeyScroll.setPreferredSize(new Dimension(300, 75));
+        rowPrivateKey = row("Private Key (PEM)", privateKeyScroll,
+                "Paste your PKCS#8 private key in PEM format.\n"
+                + "Must start with -----BEGIN PRIVATE KEY-----");
         form.add(rowSecret);
         form.add(rowPrivateKey);
+        rowPrivateKey.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
         rowJwtAudience = row("JWT Audience", tfJwtAudience,
                 "The audience claim in the JWT assertion. Defaults to the Token URL if blank.\n" +
                 "Keycloak: use the realm URL (e.g. http://host:port/realms/myrealm).\n" +
@@ -596,7 +608,11 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private Component vGap(int h) { return Box.createRigidArea(new Dimension(0, h)); }
 
     private JTextField   field()           { return new JTextField(); }
-    private JPasswordField pwField()       { return new JPasswordField(); }
+    private JPasswordField pwField() {
+        JPasswordField f = new JPasswordField();
+        f.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+        return f;
+    }
     private JLabel lbl(String text)        { return new JLabel(text); }
     private JButton btn(String text)       { return new JButton(text); }
     private JButton smallBtn(String text)  {
@@ -719,7 +735,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         tfTokenUrl.setText(p.getTokenUrl());
         tfClientId.setText(p.getClientId());
         pfSecret.setText(p.getClientSecret());
-        pfPrivateKey.setText(p.getPrivateKeyPem());
+        taPrivateKey.setText(p.getPrivateKeyPem());
         tfJwtAudience.setText(p.getJwtAudience());
         cbJwtAlgorithm.setSelectedItem(p.getJwtAlgorithm());
         spJwtLifetime.setValue(p.getJwtLifetimeSeconds());
@@ -755,7 +771,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         p.setTokenUrl(tfTokenUrl.getText().trim());
         p.setClientId(tfClientId.getText().trim());
         p.setClientSecret(new String(pfSecret.getPassword()));
-        p.setPrivateKeyPem(new String(pfPrivateKey.getPassword()));
+        p.setPrivateKeyPem(taPrivateKey.getText().trim());
         p.setJwtAudience(tfJwtAudience.getText().trim());
         p.setJwtAlgorithm((OAuthProfile.JwtAlgorithm) cbJwtAlgorithm.getSelectedItem());
         p.setJwtLifetimeSeconds((Integer) spJwtLifetime.getValue());
