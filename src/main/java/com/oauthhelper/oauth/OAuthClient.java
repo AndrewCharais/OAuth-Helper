@@ -184,10 +184,12 @@ public class OAuthClient {
                     ? profile.getJwtAudience()
                     : profile.getTokenUrl();
 
+            // aud must be a JSON array — Keycloak and many other IdPs require this
+            // even though RFC 7523 permits a plain string value.
             String payload = b64url("{\"iss\":\"" + profile.getClientId()
                     + "\",\"sub\":\"" + profile.getClientId()
-                    + "\",\"aud\":\"" + aud
-                    + "\",\"jti\":\"" + UUID.randomUUID()
+                    + "\",\"aud\":[\"" + aud + "\"]"
+                    + ",\"jti\":\"" + UUID.randomUUID()
                     + "\",\"iat\":" + now + ",\"exp\":" + exp + "}");
 
             String input = header + "." + payload;
