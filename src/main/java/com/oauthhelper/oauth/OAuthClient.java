@@ -160,6 +160,16 @@ public class OAuthClient {
                     .append(enc("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"));
                 body.append("&client_assertion=").append(enc(buildJwt(profile)));
             }
+            case CLIENT_SECRET_JWT -> {
+                // Signs the JWT assertion with the client secret (HMAC).
+                // RFC 7523 + OIDC Core §9 — symmetric variant.
+                // client_id is sent in the body so the IdP knows which client is authenticating
+                // (the HMAC key is the secret itself, not a registered asymmetric key).
+                body.append("&client_id=").append(enc(profile.getClientId()));
+                body.append("&client_assertion_type=")
+                    .append(enc("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"));
+                body.append("&client_assertion=").append(enc(buildJwt(profile)));
+            }
             case HTTP_BASIC -> {
                 // Credentials are in the Authorization: Basic header (built in post()).
                 // RFC 6749 §2.3.1: client MUST NOT send credentials in the request body
@@ -193,17 +203,27 @@ public class OAuthClient {
                     + "\",\"iat\":" + now + ",\"exp\":" + exp + "}");
 
             String input = header + "." + payload;
-            PrivateKey key = loadKey(profile.getPrivateKeyPem(), alg);
+            byte[] jwtSig;
 
-            String jcaAlg = jcaSignatureAlgorithm(alg);
-            java.security.Signature sig = java.security.Signature.getInstance(jcaAlg);
-            sig.initSign(key);
-            sig.update(input.getBytes(StandardCharsets.UTF_8));
-
-            byte[] rawSig = sig.sign();
-
-            // EC signatures from JCA are DER-encoded; JWT requires raw R||S format
-            byte[] jwtSig = isEc(alg) ? derToJose(rawSig, alg) : rawSig;
+            if (isHmac(alg)) {
+                // Symmetric signing with client secret (Client Secret JWT)
+                String macAlg = jcaMacAlgorithm(alg);
+                javax.crypto.Mac mac = javax.crypto.Mac.getInstance(macAlg);
+                javax.crypto.spec.SecretKeySpec secretKey = new javax.crypto.spec.SecretKeySpec(
+                        profile.getClientSecret().getBytes(StandardCharsets.UTF_8), macAlg);
+                mac.init(secretKey);
+                jwtSig = mac.doFinal(input.getBytes(StandardCharsets.UTF_8));
+            } else {
+                // Asymmetric signing with private key (Private Key JWT)
+                PrivateKey key = loadKey(profile.getPrivateKeyPem(), alg);
+                String jcaAlg = jcaSignatureAlgorithm(alg);
+                java.security.Signature sig = java.security.Signature.getInstance(jcaAlg);
+                sig.initSign(key);
+                sig.update(input.getBytes(StandardCharsets.UTF_8));
+                byte[] rawSig = sig.sign();
+                // EC signatures from JCA are DER-encoded; JWT requires raw R||S format
+                jwtSig = isEc(alg) ? derToJose(rawSig, alg) : rawSig;
+            }
 
             return input + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(jwtSig);
         } catch (Exception e) {
@@ -211,7 +231,7 @@ public class OAuthClient {
         }
     }
 
-    /** Maps our JwtAlgorithm enum to the JCA Signature algorithm name. */
+    /** Maps our JwtAlgorithm enum to the JCA Signature algorithm name (asymmetric only). */
     private static String jcaSignatureAlgorithm(OAuthProfile.JwtAlgorithm alg) {
         return switch (alg) {
             case RS256 -> "SHA256withRSA";
@@ -219,11 +239,27 @@ public class OAuthClient {
             case RS512 -> "SHA512withRSA";
             case ES256 -> "SHA256withECDSA";
             case ES384 -> "SHA384withECDSA";
+            default    -> throw new IllegalArgumentException("Not an asymmetric algorithm: " + alg);
         };
     }
 
     private static boolean isEc(OAuthProfile.JwtAlgorithm alg) {
         return alg == OAuthProfile.JwtAlgorithm.ES256 || alg == OAuthProfile.JwtAlgorithm.ES384;
+    }
+
+    private static boolean isHmac(OAuthProfile.JwtAlgorithm alg) {
+        return alg == OAuthProfile.JwtAlgorithm.HS256
+            || alg == OAuthProfile.JwtAlgorithm.HS384
+            || alg == OAuthProfile.JwtAlgorithm.HS512;
+    }
+
+    private static String jcaMacAlgorithm(OAuthProfile.JwtAlgorithm alg) {
+        return switch (alg) {
+            case HS256 -> "HmacSHA256";
+            case HS384 -> "HmacSHA384";
+            case HS512 -> "HmacSHA512";
+            default    -> "HmacSHA256";
+        };
     }
 
     /** Returns the expected R/S component size in bytes for an EC algorithm. */
