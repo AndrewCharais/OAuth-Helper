@@ -89,7 +89,9 @@ public class ProfileStore {
         o.setString("clientId",          p.getClientId());
         o.setString("clientSecret",      p.getClientSecret());
         o.setString("privateKeyPem",     p.getPrivateKeyPem());
-        o.setString("jwtAlgorithm",      p.getJwtAlgorithm());
+        o.setString("jwtAlgorithm",      p.getJwtAlgorithm().name());
+        o.setString("jwtAudience",       p.getJwtAudience());
+        o.setInteger("jwtLifetime",      p.getJwtLifetimeSeconds());
         o.setString("scopes",            p.getScopes());
         o.setBoolean("injectProxy",      p.isInjectProxy());
         o.setBoolean("injectRepeater",   p.isInjectRepeater());
@@ -116,7 +118,10 @@ public class ProfileStore {
         safeStr(o.getString("clientId"),          p::setClientId);
         safeStr(o.getString("clientSecret"),      p::setClientSecret);
         safeStr(o.getString("privateKeyPem"),     p::setPrivateKeyPem);
-        safeStr(o.getString("jwtAlgorithm"),      p::setJwtAlgorithm);
+        safeEnum(o.getString("jwtAlgorithm"),     OAuthProfile.JwtAlgorithm.class, p::setJwtAlgorithm);
+        safeStr(o.getString("jwtAudience"),       p::setJwtAudience);
+        Integer jwtLife = o.getInteger("jwtLifetime");
+        if (jwtLife != null) p.setJwtLifetimeSeconds(jwtLife);
         safeStr(o.getString("scopes"),            p::setScopes);
         safeBool(o.getBoolean("injectProxy"),      p::setInjectProxy);
         safeBool(o.getBoolean("injectRepeater"),   p::setInjectRepeater);
