@@ -43,18 +43,6 @@ public class OAuthClient {
     }
 
 
-    /**
-     * Use a stored refresh token to get a new access token without user interaction.
-     * Works for both Client Credentials tokens (if IdP issues refresh tokens) and
-     * PKCE tokens.
-     */
-    public TokenEntry refreshToken(OAuthProfile profile, String refreshToken) throws Exception {
-        StringBuilder body = new StringBuilder("grant_type=refresh_token");
-        body.append("&refresh_token=").append(enc(refreshToken));
-        appendClientAuth(body, profile);
-        return post(profile, body.toString());
-    }
-
     public TokenEntry exchangeCode(OAuthProfile profile, String code,
                                    String verifier, String redirectUri) throws Exception {
         StringBuilder body = new StringBuilder("grant_type=authorization_code");
@@ -114,7 +102,7 @@ public class OAuthClient {
     private TokenEntry parse(String profileName, String json) throws Exception {
         String accessToken  = extract(json, "access_token");
         String tokenType    = extract(json, "token_type");
-        String refreshToken = extract(json, "refresh_token");
+        // Client Credentials MUST NOT issue refresh tokens (RFC 6749 §4.4) — ignored
         String expiresIn    = extract(json, "expires_in");
 
         if (accessToken == null)
@@ -141,7 +129,7 @@ public class OAuthClient {
 
         return new TokenEntry(profileName, accessToken,
                 tokenType != null ? tokenType : "Bearer",
-                refreshToken, now, expiresAt, null, json);
+                null, now, expiresAt, null, json);
     }
 
     // ── Auth helpers ──────────────────────────────────────────────────────────
@@ -188,7 +176,16 @@ public class OAuthClient {
             OAuthProfile.JwtAlgorithm alg = profile.getJwtAlgorithm();
             String header  = b64url("{\"alg\":\"" + alg.name() + "\",\"typ\":\"JWT\"}");
             long now       = Instant.now().getEpochSecond();
-            long exp       = now + profile.getJwtLifetimeSeconds();
+
+            // Subtract a small clock skew buffer so the assertion is never
+            // considered "issued in the future" by IdPs running in Docker or
+            // other environments where the container clock may drift slightly.
+            long skew      = 10; // seconds — compensates for Docker/container clock drift
+            if (profile.getJwtLifetimeSeconds() <= skew)
+                throw new IllegalArgumentException(
+                        "Assertion lifetime must be greater than " + skew + " seconds.");
+            long iat       = now - skew;
+            long exp       = iat + profile.getJwtLifetimeSeconds();
 
             String aud = (profile.getJwtAudience() != null && !profile.getJwtAudience().isBlank())
                     ? profile.getJwtAudience()
@@ -200,7 +197,7 @@ public class OAuthClient {
                     + "\",\"sub\":\"" + profile.getClientId()
                     + "\",\"aud\":[\"" + aud + "\"]"
                     + ",\"jti\":\"" + UUID.randomUUID()
-                    + "\",\"iat\":" + now + ",\"exp\":" + exp + "}");
+                    + "\",\"iat\":" + iat + ",\"exp\":" + exp + "}");
 
             String input = header + "." + payload;
             byte[] jwtSig;
