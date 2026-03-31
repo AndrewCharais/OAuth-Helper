@@ -1,150 +1,146 @@
-package com.oauthhelper.persistence;
+package com.oauthhelper.oauth;
 
-import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.persistence.PersistedList;
-import burp.api.montoya.persistence.PersistedObject;
-import com.oauthhelper.oauth.OAuthProfile;
+public class OAuthProfile {
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
+    public enum GrantType {
+        CLIENT_CREDENTIALS
+        // AUTH_CODE_PKCE — not yet supported in this release
+    }
 
-/**
- * Persists profiles to the Burp project file via api.persistence().extensionData().
- *
- * Layout under extensionData root:
- *   "profile_names"   → StringList — ordered list of profile names
- *   "profile:<name>"  → ChildObject — all profile fields as typed primitives
- *
- * Professional only — on Community, extensionData() is in-memory and does not
- * survive restarts. Save/load still work within the session; this is handled
- * gracefully with no errors shown to the user.
- */
-public class ProfileStore {
+    public enum ClientAuthMethod {
+        HTTP_BASIC,
+        POST_BODY,
+        PRIVATE_KEY_JWT
+    }
 
-    private static final String KEY_NAMES = "profile_names";
-    private static final String PREFIX    = "profile:";
+    public enum RefreshMode {
+        MANUAL,
+        AUTO_SILENT
+    }
 
-    private final MontoyaApi api;
+    /**
+     * Signing algorithms supported for Private Key JWT assertions.
+     * RS* = RSA-based (PKCS#8 RSA private key required).
+     * ES* = EC-based  (PKCS#8 EC private key required).
+     */
+    public enum JwtAlgorithm {
+        RS256, RS384, RS512,
+        ES256, ES384
+    }
 
-    public ProfileStore(MontoyaApi api) { this.api = api; }
+    private String name = "New Profile";
+    private GrantType grantType = GrantType.CLIENT_CREDENTIALS;
+    private ClientAuthMethod clientAuthMethod = ClientAuthMethod.HTTP_BASIC;
+    private String tokenUrl = "";
+    private String authorizationUrl = "";
+    private String clientId = "";
+    private String clientSecret = "";
+    private String privateKeyPem = "";
+    private JwtAlgorithm jwtAlgorithm      = JwtAlgorithm.RS256;
+    private String       jwtAudience       = "";  // defaults to token URL if blank
+    private int          jwtLifetimeSeconds = 300; // assertion exp window, 5 min default
+    private String scopes = "";
 
-    // ── Save all profiles ─────────────────────────────────────────────────────
+    // Per-tool injection toggles — all on by default
+    private boolean injectProxy    = true;
+    private boolean injectRepeater = true;
+    private boolean injectIntruder = true;
+    private boolean injectScanner  = true;
 
-    public void saveAll(List<OAuthProfile> profiles) {
-        try {
-            PersistedObject root = api.persistence().extensionData();
+    // Injection header settings
+    private String  headerName       = "Authorization";
+    private String  tokenPrefix      = "Bearer";
+    private boolean addIfMissing     = true;
+    private boolean replaceIfPresent = true;
 
-            PersistedList<String> nameList = PersistedList.persistedStringList();
-            for (OAuthProfile p : profiles) nameList.add(p.getName());
-            root.setStringList(KEY_NAMES, nameList);
+    // Token header scanning / auto-regen
+    private boolean scanEnabled    = true;
+    private String  scanCodes      = "401, 403";
+    private String  sessionPhrase  = "";
+    private boolean regenEnabled   = true;
+    private int     regenThreshold = 3;
 
-            for (OAuthProfile p : profiles) {
-                PersistedObject obj = PersistedObject.persistedObject();
-                writeProfile(obj, p);
-                root.setChildObject(PREFIX + p.getName(), obj);
-            }
+    // Refresh
+    private RefreshMode refreshMode          = RefreshMode.MANUAL;
+    private int         refreshBufferSeconds = 300;
 
-            // Remove stale entries for deleted profiles
-            for (String key : root.childObjectKeys()) {
-                if (!key.startsWith(PREFIX)) continue;
-                String storedName = key.substring(PREFIX.length());
-                boolean still = profiles.stream().anyMatch(p -> p.getName().equals(storedName));
-                if (!still) root.deleteChildObject(key);
-            }
-        } catch (Exception e) {
-            api.logging().logToOutput("[OAuth Helper] Could not save profiles: " + e.getMessage());
+    public OAuthProfile(String name) { this.name = name; }
+
+    // ── Getters / setters ─────────────────────────────────────────────────────
+
+    public String getName()                        { return name; }
+    public void   setName(String v)                { this.name = v; }
+    public GrantType getGrantType()                { return grantType; }
+    public void      setGrantType(GrantType v)     { this.grantType = v; }
+    public ClientAuthMethod getClientAuthMethod()              { return clientAuthMethod; }
+    public void             setClientAuthMethod(ClientAuthMethod v) { this.clientAuthMethod = v; }
+    public String getTokenUrl()                    { return tokenUrl; }
+    public void   setTokenUrl(String v)            { this.tokenUrl = v; }
+    public String getAuthorizationUrl()            { return authorizationUrl; }
+    public void   setAuthorizationUrl(String v)    { this.authorizationUrl = v; }
+    public String getClientId()                    { return clientId; }
+    public void   setClientId(String v)            { this.clientId = v; }
+    public String getClientSecret()                { return clientSecret; }
+    public void   setClientSecret(String v)        { this.clientSecret = v; }
+    public String getPrivateKeyPem()               { return privateKeyPem; }
+    public void   setPrivateKeyPem(String v)       { this.privateKeyPem = v; }
+    public JwtAlgorithm getJwtAlgorithm()          { return jwtAlgorithm; }
+    public void         setJwtAlgorithm(JwtAlgorithm v) { this.jwtAlgorithm = v; }
+    public String getJwtAudience()                 { return jwtAudience; }
+    public void   setJwtAudience(String v)         { this.jwtAudience = v; }
+    public int    getJwtLifetimeSeconds()          { return jwtLifetimeSeconds; }
+    public void   setJwtLifetimeSeconds(int v)     { this.jwtLifetimeSeconds = v; }
+    public String getScopes()                      { return scopes; }
+    public void   setScopes(String v)              { this.scopes = v; }
+
+    public boolean isInjectProxy()                 { return injectProxy; }
+    public void    setInjectProxy(boolean v)       { this.injectProxy = v; }
+    public boolean isInjectRepeater()              { return injectRepeater; }
+    public void    setInjectRepeater(boolean v)    { this.injectRepeater = v; }
+    public boolean isInjectIntruder()              { return injectIntruder; }
+    public void    setInjectIntruder(boolean v)    { this.injectIntruder = v; }
+    public boolean isInjectScanner()               { return injectScanner; }
+    public void    setInjectScanner(boolean v)     { this.injectScanner = v; }
+
+    public boolean isAnyInjectionEnabled() {
+        return injectProxy || injectRepeater || injectIntruder || injectScanner;
+    }
+
+    public String  getHeaderName()                 { return headerName; }
+    public void    setHeaderName(String v)         { this.headerName = v; }
+    public String  getTokenPrefix()                { return tokenPrefix; }
+    public void    setTokenPrefix(String v)        { this.tokenPrefix = v; }
+    public boolean isAddIfMissing()                { return addIfMissing; }
+    public void    setAddIfMissing(boolean v)      { this.addIfMissing = v; }
+    public boolean isReplaceIfPresent()            { return replaceIfPresent; }
+    public void    setReplaceIfPresent(boolean v)  { this.replaceIfPresent = v; }
+
+    public RefreshMode getRefreshMode()            { return refreshMode; }
+    public void        setRefreshMode(RefreshMode v) { this.refreshMode = v; }
+    public int  getRefreshBufferSeconds()          { return refreshBufferSeconds; }
+    public void setRefreshBufferSeconds(int v)     { this.refreshBufferSeconds = v; }
+
+    public boolean isScanEnabled()                 { return scanEnabled; }
+    public void    setScanEnabled(boolean v)       { this.scanEnabled = v; }
+    public String  getScanCodes()                  { return scanCodes; }
+    public void    setScanCodes(String v)          { this.scanCodes = v; }
+    public String  getSessionPhrase()              { return sessionPhrase; }
+    public void    setSessionPhrase(String v)      { this.sessionPhrase = v; }
+
+    public java.util.Set<Integer> parsedScanCodes() {
+        java.util.Set<Integer> codes = new java.util.HashSet<>();
+        if (scanCodes == null || scanCodes.isBlank()) { codes.add(401); codes.add(403); return codes; }
+        for (String part : scanCodes.split(",")) {
+            try { codes.add(Integer.parseInt(part.trim())); }
+            catch (NumberFormatException ignored) {}
         }
+        return codes;
     }
 
-    // ── Load all profiles ─────────────────────────────────────────────────────
+    public boolean isRegenEnabled()               { return regenEnabled; }
+    public void    setRegenEnabled(boolean v)      { this.regenEnabled = v; }
+    public int     getRegenThreshold()             { return regenThreshold; }
+    public void    setRegenThreshold(int v)        { this.regenThreshold = v; }
 
-    public List<OAuthProfile> loadAll() {
-        List<OAuthProfile> result = new ArrayList<>();
-        try {
-            PersistedObject root = api.persistence().extensionData();
-            PersistedList<String> nameList = root.getStringList(KEY_NAMES);
-            if (nameList == null || nameList.isEmpty()) return result;
-
-            for (String name : nameList) {
-                PersistedObject obj = root.getChildObject(PREFIX + name);
-                if (obj == null) continue;
-                result.add(readProfile(name, obj));
-            }
-            api.logging().logToOutput("[OAuth Helper] Loaded " + result.size() + " profile(s) from project.");
-        } catch (Exception e) {
-            api.logging().logToOutput("[OAuth Helper] Could not load profiles: " + e.getMessage());
-        }
-        return result;
-    }
-
-    // ── Serialisation ─────────────────────────────────────────────────────────
-
-    private static void writeProfile(PersistedObject o, OAuthProfile p) {
-        o.setString("name",              p.getName());
-        o.setString("grantType",         p.getGrantType().name());
-        o.setString("clientAuthMethod",  p.getClientAuthMethod().name());
-        o.setString("tokenUrl",          p.getTokenUrl());
-        o.setString("authorizationUrl",  p.getAuthorizationUrl());
-        o.setString("clientId",          p.getClientId());
-        o.setString("clientSecret",      p.getClientSecret());
-        o.setString("privateKeyPem",     p.getPrivateKeyPem());
-        o.setString("jwtAlgorithm",      p.getJwtAlgorithm().name());
-        o.setString("jwtAudience",       p.getJwtAudience());
-        o.setInteger("jwtLifetime",      p.getJwtLifetimeSeconds());
-        o.setString("scopes",            p.getScopes());
-        o.setBoolean("injectProxy",      p.isInjectProxy());
-        o.setBoolean("injectRepeater",   p.isInjectRepeater());
-        o.setBoolean("injectIntruder",   p.isInjectIntruder());
-        o.setBoolean("injectScanner",    p.isInjectScanner());
-        o.setString("headerName",        p.getHeaderName());
-        o.setString("tokenPrefix",       p.getTokenPrefix());
-        o.setBoolean("addIfMissing",     p.isAddIfMissing());
-        o.setBoolean("replaceIfPresent", p.isReplaceIfPresent());
-        o.setString("refreshMode",       p.getRefreshMode().name());
-        o.setBoolean("scanEnabled",      p.isScanEnabled());
-        o.setString("scanCodes",          p.getScanCodes());
-        o.setString("sessionPhrase",      p.getSessionPhrase());
-        o.setBoolean("regenEnabled",     p.isRegenEnabled());
-        o.setInteger("regenThreshold",   p.getRegenThreshold());
-    }
-
-    private static OAuthProfile readProfile(String name, PersistedObject o) {
-        OAuthProfile p = new OAuthProfile(name);
-        safeEnum(o.getString("grantType"),        OAuthProfile.GrantType.class,        p::setGrantType);
-        safeEnum(o.getString("clientAuthMethod"), OAuthProfile.ClientAuthMethod.class, p::setClientAuthMethod);
-        safeStr(o.getString("tokenUrl"),          p::setTokenUrl);
-        safeStr(o.getString("authorizationUrl"),  p::setAuthorizationUrl);
-        safeStr(o.getString("clientId"),          p::setClientId);
-        safeStr(o.getString("clientSecret"),      p::setClientSecret);
-        safeStr(o.getString("privateKeyPem"),     p::setPrivateKeyPem);
-        safeEnum(o.getString("jwtAlgorithm"),     OAuthProfile.JwtAlgorithm.class, p::setJwtAlgorithm);
-        safeStr(o.getString("jwtAudience"),       p::setJwtAudience);
-        Integer jwtLife = o.getInteger("jwtLifetime");
-        if (jwtLife != null) p.setJwtLifetimeSeconds(jwtLife);
-        safeStr(o.getString("scopes"),            p::setScopes);
-        safeBool(o.getBoolean("injectProxy"),      p::setInjectProxy);
-        safeBool(o.getBoolean("injectRepeater"),   p::setInjectRepeater);
-        safeBool(o.getBoolean("injectIntruder"),   p::setInjectIntruder);
-        safeBool(o.getBoolean("injectScanner"),    p::setInjectScanner);
-        safeStr(o.getString("headerName"),         p::setHeaderName);
-        safeStr(o.getString("tokenPrefix"),        p::setTokenPrefix);
-        safeBool(o.getBoolean("addIfMissing"),     p::setAddIfMissing);
-        safeBool(o.getBoolean("replaceIfPresent"), p::setReplaceIfPresent);
-        safeEnum(o.getString("refreshMode"),       OAuthProfile.RefreshMode.class, p::setRefreshMode);
-        safeBool(o.getBoolean("scanEnabled"),      p::setScanEnabled);
-        safeStr(o.getString("scanCodes"),           p::setScanCodes);
-        safeStr(o.getString("sessionPhrase"),       p::setSessionPhrase);
-        safeBool(o.getBoolean("regenEnabled"),     p::setRegenEnabled);
-        Integer thresh = o.getInteger("regenThreshold");
-        if (thresh != null) p.setRegenThreshold(thresh);
-        return p;
-    }
-
-    private static void safeStr(String v, Consumer<String> s)  { if (v != null) s.accept(v); }
-    private static void safeBool(Boolean v, Consumer<Boolean> s) { if (v != null) s.accept(v); }
-    private static <E extends Enum<E>> void safeEnum(String v, Class<E> cls, Consumer<E> s) {
-        if (v == null) return;
-        try { s.accept(Enum.valueOf(cls, v)); } catch (IllegalArgumentException ignored) {}
-    }
+    @Override public String toString() { return name; }
 }
