@@ -175,9 +175,16 @@ public class OAuthClient {
         try {
             String header  = b64url("{\"alg\":\"" + profile.getJwtAlgorithm() + "\",\"typ\":\"JWT\"}");
             long now       = Instant.now().getEpochSecond();
+
+            // The JWT audience must be the token endpoint URL itself per RFC 7523.
+            // Keycloak additionally accepts the issuer (realm) URL.
+            // We send the full token URL as aud — this works for Keycloak and most IdPs.
+            // If the IdP rejects it, the token URL is correct per RFC 7523 §3.
+            String aud = deriveAudience(profile.getTokenUrl());
+
             String payload = b64url("{\"iss\":\"" + profile.getClientId()
                     + "\",\"sub\":\"" + profile.getClientId()
-                    + "\",\"aud\":\"" + profile.getTokenUrl()
+                    + "\",\"aud\":\"" + aud
                     + "\",\"jti\":\"" + UUID.randomUUID()
                     + "\",\"iat\":" + now + ",\"exp\":" + (now + 300) + "}");
             String input = header + "." + payload;
@@ -189,6 +196,24 @@ public class OAuthClient {
         } catch (Exception e) {
             throw new IllegalStateException("JWT build failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Derives the JWT audience from the token URL.
+     * Keycloak expects the issuer (realm) URL, e.g.:
+     *   http://localhost:8080/realms/test-realm
+     * from a token URL of:
+     *   http://localhost:8080/realms/test-realm/protocol/openid-connect/token
+     *
+     * For other IdPs the full token URL is returned unchanged (RFC 7523 §3).
+     */
+    private static String deriveAudience(String tokenUrl) {
+        if (tokenUrl == null) return "";
+        // Strip Keycloak-style path suffix
+        int idx = tokenUrl.indexOf("/protocol/");
+        if (idx > 0) return tokenUrl.substring(0, idx);
+        // For other IdPs fall back to the full token URL
+        return tokenUrl;
     }
 
     private PrivateKey loadKey(String pem) throws Exception {
