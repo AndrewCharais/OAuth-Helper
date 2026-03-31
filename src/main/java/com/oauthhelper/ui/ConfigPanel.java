@@ -402,7 +402,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         headerRow.setOpaque(false);
         headerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         headerRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-        headerRow.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         headerRow.setBorder(new EmptyBorder(6, 0, 2, 0));
 
         JLabel arrow = new JLabel(startExpanded ? "▼" : "▶");
@@ -433,6 +432,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         bodyWrapper.setVisible(startExpanded);
         container.add(bodyWrapper);
 
+        // Only the arrow and title are clickable — not the full-width separator area
+        headerRow.setCursor(Cursor.getDefaultCursor());
         java.awt.event.MouseAdapter toggle = new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent e) {
                 boolean nowVisible = !bodyWrapper.isVisible();
@@ -442,9 +443,10 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
                 container.repaint();
             }
         };
-        headerRow.addMouseListener(toggle);
         arrow.addMouseListener(toggle);
+        arrow.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         titleLbl.addMouseListener(toggle);
+        titleLbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         return container;
     }
