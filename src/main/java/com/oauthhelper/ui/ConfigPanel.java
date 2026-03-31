@@ -43,8 +43,10 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JPanel rightPane;
     private JPanel formPanel;
 
-    private JTextField    tfName, tfTokenUrl, tfClientId, tfScopes;
+    private JTextField    tfName, tfTokenUrl, tfClientId, tfScopes, tfJwtAudience;
     private JPasswordField pfSecret, pfPrivateKey;
+    private JComboBox<OAuthProfile.JwtAlgorithm> cbJwtAlgorithm;
+    private JSpinner spJwtLifetime;
     private JComboBox<OAuthProfile.GrantType>        cbGrant;
     private JComboBox<OAuthProfile.ClientAuthMethod> cbAuth;
     private JComboBox<String>                        cbRefresh;
@@ -55,7 +57,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JSpinner   spRegenThreshold;
     private JTextField tfScanCodes, tfSessionPhrase;
 
-    private JPanel rowSecret, rowPrivateKey, rowRefreshMode;
+    private JPanel rowSecret, rowPrivateKey, rowJwtAudience, rowJwtAlgorithm, rowJwtLifetime, rowRefreshMode;
     private JPanel pnlInjectionBody;
     private JPanel pnlInjectionTools;
     private JPanel pnlMonitorBody;
@@ -192,6 +194,9 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         cbAuth = combo(OAuthProfile.ClientAuthMethod.values(),
                 v -> authLabel((OAuthProfile.ClientAuthMethod) v));
         cbAuth.addActionListener(e -> updateVisibility());
+        cbJwtAlgorithm = new JComboBox<>(OAuthProfile.JwtAlgorithm.values());
+        cbJwtAlgorithm.addActionListener(e -> updateVisibility());
+        spJwtLifetime = new JSpinner(new SpinnerNumberModel(300, 30, 3600, 30));
 
         cbRefresh = new JComboBox<>(REFRESH_LABELS);
         cbRefresh.addActionListener(e -> updateVisibility());
@@ -214,6 +219,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         tfClientId      = field();
         pfSecret        = pwField();
         pfPrivateKey    = pwField();
+        tfJwtAudience   = field();
         tfScopes        = field();
         tfHeaderName    = new JTextField("Authorization");
         tfTokenPrefix   = new JTextField("Bearer");
@@ -254,6 +260,18 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         rowPrivateKey = row("Private Key (PEM)", pfPrivateKey);
         form.add(rowSecret);
         form.add(rowPrivateKey);
+        rowJwtAudience = row("JWT Audience", tfJwtAudience,
+                "The audience claim in the JWT assertion. Defaults to the Token URL if blank.\n" +
+                "Keycloak: use the realm URL (e.g. http://host:port/realms/myrealm).\n" +
+                "Other IdPs: use the token endpoint URL.");
+        form.add(rowJwtAudience);
+        rowJwtAlgorithm = row("Signing Algorithm", cbJwtAlgorithm,
+                "RS256/RS384/RS512 for RSA keys. ES256/ES384 for EC (elliptic curve) keys.");
+        form.add(rowJwtAlgorithm);
+        rowJwtLifetime = row("Assertion Lifetime (s)", spJwtLifetime,
+                "How many seconds until the JWT assertion expires. Most IdPs accept 300 (5 min).\n"
+                + "Reduce if your IdP rejects assertions with too long a lifetime.");
+        form.add(rowJwtLifetime);
         lblScopesLabel = lbl("Scopes (optional)");
         lblScopesLabel.setPreferredSize(new Dimension(210, 22));
         form.add(rowWithLabel(lblScopesLabel, tfScopes,
@@ -638,6 +656,9 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
         rowSecret.setVisible(!isJwt);
         rowPrivateKey.setVisible(isJwt);
+        if (rowJwtAudience != null) rowJwtAudience.setVisible(isJwt);
+        if (rowJwtAlgorithm != null) rowJwtAlgorithm.setVisible(isJwt);
+        if (rowJwtLifetime  != null) rowJwtLifetime.setVisible(isJwt);
         if (rowRefreshMode != null) rowRefreshMode.setVisible(true);
         if (pnlInjectionTools != null) pnlInjectionTools.setVisible(anyInject);
         if (lblScopesLabel != null) lblScopesLabel.setText("Scopes (optional)");
@@ -699,6 +720,9 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         tfClientId.setText(p.getClientId());
         pfSecret.setText(p.getClientSecret());
         pfPrivateKey.setText(p.getPrivateKeyPem());
+        tfJwtAudience.setText(p.getJwtAudience());
+        cbJwtAlgorithm.setSelectedItem(p.getJwtAlgorithm());
+        spJwtLifetime.setValue(p.getJwtLifetimeSeconds());
         tfScopes.setText(p.getScopes());
         tfHeaderName.setText(p.getHeaderName().isBlank() ? "Authorization" : p.getHeaderName());
         tfTokenPrefix.setText(p.getTokenPrefix().isBlank() ? "Bearer" : p.getTokenPrefix());
@@ -732,6 +756,9 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         p.setClientId(tfClientId.getText().trim());
         p.setClientSecret(new String(pfSecret.getPassword()));
         p.setPrivateKeyPem(new String(pfPrivateKey.getPassword()));
+        p.setJwtAudience(tfJwtAudience.getText().trim());
+        p.setJwtAlgorithm((OAuthProfile.JwtAlgorithm) cbJwtAlgorithm.getSelectedItem());
+        p.setJwtLifetimeSeconds((Integer) spJwtLifetime.getValue());
         p.setClientAuthMethod((OAuthProfile.ClientAuthMethod) cbAuth.getSelectedItem());
         p.setScopes(tfScopes.getText().trim());
         p.setHeaderName(tfHeaderName.getText().trim());
@@ -1004,6 +1031,9 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         j.append(jfield(q, "tokenUrl",         q + esc(p.getTokenUrl())                  + q, true,  nl));
         j.append(jfield(q, "clientId",         q + esc(p.getClientId())                  + q, true,  nl));
         j.append(jfield(q, "clientSecret",     q + esc(p.getClientSecret())              + q, true,  nl));
+        j.append(jfield(q, "jwtAudience",    q + esc(p.getJwtAudience())              + q, true,  nl));
+        j.append(jfield(q, "jwtAlgorithm",   q + esc(p.getJwtAlgorithm().name())         + q, true,  nl));
+        j.append(jfield(q, "jwtLifetime",     String.valueOf(p.getJwtLifetimeSeconds()),       true,  nl));
         j.append(jfield(q, "scopes",           q + esc(p.getScopes())                    + q, true,  nl));
         j.append(jfield(q, "headerName",       q + esc(p.getHeaderName())                + q, true,  nl));
         j.append(jfield(q, "tokenPrefix",      q + esc(p.getTokenPrefix())               + q, true,  nl));
@@ -1065,6 +1095,11 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         if ((s = jsonStr(json, "tokenUrl"))         != null) p.setTokenUrl(s);
         if ((s = jsonStr(json, "clientId"))          != null) p.setClientId(s);
         if ((s = jsonStr(json, "clientSecret"))      != null) p.setClientSecret(s);
+        if ((s = jsonStr(json, "jwtAudience"))       != null) p.setJwtAudience(s);
+        String ja = jsonStr(json, "jwtAlgorithm");
+        if (ja != null) try { p.setJwtAlgorithm(OAuthProfile.JwtAlgorithm.valueOf(ja)); } catch (IllegalArgumentException ignored) {}
+        String jl = jsonStr(json, "jwtLifetime");
+        if (jl != null) try { p.setJwtLifetimeSeconds(Integer.parseInt(jl)); } catch (NumberFormatException ignored) {}
         if ((s = jsonStr(json, "scopes"))            != null) p.setScopes(s);
         if ((s = jsonStr(json, "headerName"))        != null) p.setHeaderName(s);
         if ((s = jsonStr(json, "tokenPrefix"))       != null) p.setTokenPrefix(s);
