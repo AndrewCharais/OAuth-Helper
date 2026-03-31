@@ -10,7 +10,8 @@ public class OAuthProfile {
     public enum ClientAuthMethod {
         HTTP_BASIC,
         POST_BODY,
-        PRIVATE_KEY_JWT
+        PRIVATE_KEY_JWT,
+        CLIENT_SECRET_JWT
     }
 
     public enum RefreshMode {
@@ -19,13 +20,15 @@ public class OAuthProfile {
     }
 
     /**
-     * Signing algorithms supported for Private Key JWT assertions.
-     * RS* = RSA-based (PKCS#8 RSA private key required).
-     * ES* = EC-based  (PKCS#8 EC private key required).
+     * Signing algorithms for JWT assertions.
+     * RS* = RSA asymmetric  — Private Key JWT only.
+     * ES* = EC  asymmetric  — Private Key JWT only.
+     * HS* = HMAC symmetric  — Client Secret JWT only (signs with client secret).
      */
     public enum JwtAlgorithm {
         RS256, RS384, RS512,
-        ES256, ES384
+        ES256, ES384,
+        HS256, HS384, HS512
     }
 
     private String name = "New Profile";
