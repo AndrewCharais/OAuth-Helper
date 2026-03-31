@@ -153,7 +153,9 @@ public class OAuthClient {
                 body.append("&client_secret=").append(enc(profile.getClientSecret()));
             }
             case PRIVATE_KEY_JWT -> {
-                body.append("&client_id=").append(enc(profile.getClientId()));
+                // client identity is proved by the signed JWT assertion (iss claim).
+                // RFC 7523 §3: client_id in the body is optional and omitted here
+                // to avoid ambiguity with strict IdPs.
                 body.append("&client_assertion_type=")
                     .append(enc("urn:ietf:params:oauth:client-assertion-type:jwt-bearer"));
                 body.append("&client_assertion=").append(enc(buildJwt(profile)));
@@ -173,53 +175,106 @@ public class OAuthClient {
 
     private String buildJwt(OAuthProfile profile) {
         try {
-            String header  = b64url("{\"alg\":\"" + profile.getJwtAlgorithm() + "\",\"typ\":\"JWT\"}");
+            OAuthProfile.JwtAlgorithm alg = profile.getJwtAlgorithm();
+            String header  = b64url("{\"alg\":\"" + alg.name() + "\",\"typ\":\"JWT\"}");
             long now       = Instant.now().getEpochSecond();
+            long exp       = now + profile.getJwtLifetimeSeconds();
 
-            // The JWT audience must be the token endpoint URL itself per RFC 7523.
-            // Keycloak additionally accepts the issuer (realm) URL.
-            // We send the full token URL as aud — this works for Keycloak and most IdPs.
-            // If the IdP rejects it, the token URL is correct per RFC 7523 §3.
-            String aud = deriveAudience(profile.getTokenUrl());
+            String aud = (profile.getJwtAudience() != null && !profile.getJwtAudience().isBlank())
+                    ? profile.getJwtAudience()
+                    : profile.getTokenUrl();
 
             String payload = b64url("{\"iss\":\"" + profile.getClientId()
                     + "\",\"sub\":\"" + profile.getClientId()
                     + "\",\"aud\":\"" + aud
                     + "\",\"jti\":\"" + UUID.randomUUID()
-                    + "\",\"iat\":" + now + ",\"exp\":" + (now + 300) + "}");
+                    + "\",\"iat\":" + now + ",\"exp\":" + exp + "}");
+
             String input = header + "." + payload;
-            PrivateKey key = loadKey(profile.getPrivateKeyPem());
-            java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+            PrivateKey key = loadKey(profile.getPrivateKeyPem(), alg);
+
+            String jcaAlg = jcaSignatureAlgorithm(alg);
+            java.security.Signature sig = java.security.Signature.getInstance(jcaAlg);
             sig.initSign(key);
             sig.update(input.getBytes(StandardCharsets.UTF_8));
-            return input + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(sig.sign());
+
+            byte[] rawSig = sig.sign();
+
+            // EC signatures from JCA are DER-encoded; JWT requires raw R||S format
+            byte[] jwtSig = isEc(alg) ? derToJose(rawSig, alg) : rawSig;
+
+            return input + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(jwtSig);
         } catch (Exception e) {
             throw new IllegalStateException("JWT build failed: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Derives the JWT audience from the token URL.
-     * Keycloak expects the issuer (realm) URL, e.g.:
-     *   http://localhost:8080/realms/test-realm
-     * from a token URL of:
-     *   http://localhost:8080/realms/test-realm/protocol/openid-connect/token
-     *
-     * For other IdPs the full token URL is returned unchanged (RFC 7523 §3).
-     */
-    private static String deriveAudience(String tokenUrl) {
-        if (tokenUrl == null) return "";
-        // Strip Keycloak-style path suffix
-        int idx = tokenUrl.indexOf("/protocol/");
-        if (idx > 0) return tokenUrl.substring(0, idx);
-        // For other IdPs fall back to the full token URL
-        return tokenUrl;
+    /** Maps our JwtAlgorithm enum to the JCA Signature algorithm name. */
+    private static String jcaSignatureAlgorithm(OAuthProfile.JwtAlgorithm alg) {
+        return switch (alg) {
+            case RS256 -> "SHA256withRSA";
+            case RS384 -> "SHA384withRSA";
+            case RS512 -> "SHA512withRSA";
+            case ES256 -> "SHA256withECDSA";
+            case ES384 -> "SHA384withECDSA";
+        };
     }
 
-    private PrivateKey loadKey(String pem) throws Exception {
+    private static boolean isEc(OAuthProfile.JwtAlgorithm alg) {
+        return alg == OAuthProfile.JwtAlgorithm.ES256 || alg == OAuthProfile.JwtAlgorithm.ES384;
+    }
+
+    /** Returns the expected R/S component size in bytes for an EC algorithm. */
+    private static int ecKeySize(OAuthProfile.JwtAlgorithm alg) {
+        return switch (alg) {
+            case ES256 -> 32;
+            case ES384 -> 48;
+            default    -> 32;
+        };
+    }
+
+    /**
+     * Converts a DER-encoded ECDSA signature (JCA output) to the raw R||S
+     * concatenated format required by JWT (RFC 7518 §3.4).
+     */
+    private static byte[] derToJose(byte[] der, OAuthProfile.JwtAlgorithm alg) {
+        int coordLen = ecKeySize(alg);
+        // DER structure: 0x30 <len> 0x02 <rLen> <r> 0x02 <sLen> <s>
+        int offset = 3; // skip 0x30 <total-len> 0x02
+        int rLen   = der[offset++] & 0xFF;
+        byte[] r   = new byte[rLen];
+        System.arraycopy(der, offset, r, 0, rLen);
+        offset += rLen + 1; // skip 0x02
+        int sLen = der[offset++] & 0xFF;
+        byte[] s = new byte[sLen];
+        System.arraycopy(der, offset, s, 0, sLen);
+
+        byte[] jose = new byte[coordLen * 2];
+        // Right-align each component, stripping any leading 0x00 padding byte
+        copyRight(r, jose, 0,         coordLen);
+        copyRight(s, jose, coordLen,  coordLen);
+        return jose;
+    }
+
+    private static void copyRight(byte[] src, byte[] dst, int dstOffset, int len) {
+        int srcStart = 0;
+        // skip leading zero byte added by DER to keep sign bit clear
+        if (src.length > len && src[0] == 0) srcStart = 1;
+        int srcLen  = src.length - srcStart;
+        int dstStart = dstOffset + len - srcLen;
+        System.arraycopy(src, srcStart, dst, dstStart, srcLen);
+    }
+
+    /**
+     * Loads a PKCS#8 private key from PEM. Detects RSA vs EC automatically
+     * from the key material — no need for the user to specify key type.
+     */
+    private PrivateKey loadKey(String pem, OAuthProfile.JwtAlgorithm alg) throws Exception {
         String stripped = pem.replaceAll("-----[^-]+-----", "").replaceAll("\\s", "");
-        byte[] decoded = Base64.getDecoder().decode(stripped);
-        return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(decoded));
+        byte[] decoded  = Base64.getDecoder().decode(stripped);
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decoded);
+        String keyAlg = isEc(alg) ? "EC" : "RSA";
+        return KeyFactory.getInstance(keyAlg).generatePrivate(spec);
     }
 
     public static String generateCodeVerifier() {
