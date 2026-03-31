@@ -64,7 +64,7 @@ public class OAuthProfile {
     private int     regenThreshold = 3;
 
     // Refresh
-    private RefreshMode refreshMode          = RefreshMode.MANUAL;
+    private RefreshMode refreshMode          = RefreshMode.AUTO_SILENT;
     private int         refreshBufferSeconds = 300;
 
     public OAuthProfile(String name) { this.name = name; }
