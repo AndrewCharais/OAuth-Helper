@@ -666,15 +666,19 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
         OAuthProfile.GrantType grant = (OAuthProfile.GrantType) cbGrant.getSelectedItem();
         OAuthProfile.ClientAuthMethod auth = (OAuthProfile.ClientAuthMethod) cbAuth.getSelectedItem();
-        boolean isJwt     = auth  == OAuthProfile.ClientAuthMethod.PRIVATE_KEY_JWT;
+        boolean isJwt           = auth == OAuthProfile.ClientAuthMethod.PRIVATE_KEY_JWT;
+        boolean isClientSecretJwt = auth == OAuthProfile.ClientAuthMethod.CLIENT_SECRET_JWT;
+        boolean isAnyJwt          = isJwt || isClientSecretJwt;
         boolean anyInject = chkInjectProxy.isSelected() || chkInjectRepeater.isSelected()
                          || chkInjectIntruder.isSelected() || chkInjectScanner.isSelected();
 
-        rowSecret.setVisible(!isJwt);
-        rowPrivateKey.setVisible(isJwt);
-        if (rowJwtAudience != null) rowJwtAudience.setVisible(isJwt);
-        if (rowJwtAlgorithm != null) rowJwtAlgorithm.setVisible(isJwt);
-        if (rowJwtLifetime  != null) rowJwtLifetime.setVisible(isJwt);
+        rowSecret.setVisible(!isJwt);              // hidden for Private Key JWT (no secret needed)
+        rowPrivateKey.setVisible(isJwt);              // only for Private Key JWT
+        if (rowJwtAudience  != null) rowJwtAudience.setVisible(isAnyJwt);
+        if (rowJwtAlgorithm != null) rowJwtAlgorithm.setVisible(isAnyJwt);
+        if (rowJwtLifetime  != null) rowJwtLifetime.setVisible(isAnyJwt);
+        // Filter algorithm dropdown to only show relevant algorithms
+        if (cbJwtAlgorithm != null) updateAlgorithmChoices(isJwt, isClientSecretJwt);
         if (rowRefreshMode != null) rowRefreshMode.setVisible(true);
         if (pnlInjectionTools != null) pnlInjectionTools.setVisible(anyInject);
         if (lblScopesLabel != null) lblScopesLabel.setText("Scopes (optional)");
@@ -918,6 +922,42 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         }
     }
 
+    /**
+     * Repopulate the algorithm dropdown with only the algorithms relevant to the
+     * currently selected auth method. Preserves the current selection if compatible.
+     */
+    private void updateAlgorithmChoices(boolean isPrivateKey, boolean isClientSecret) {
+        OAuthProfile.JwtAlgorithm current =
+                (OAuthProfile.JwtAlgorithm) cbJwtAlgorithm.getSelectedItem();
+        cbJwtAlgorithm.removeAllItems();
+        if (isPrivateKey) {
+            // Asymmetric algorithms only
+            for (OAuthProfile.JwtAlgorithm a : new OAuthProfile.JwtAlgorithm[]{
+                    OAuthProfile.JwtAlgorithm.RS256, OAuthProfile.JwtAlgorithm.RS384,
+                    OAuthProfile.JwtAlgorithm.RS512, OAuthProfile.JwtAlgorithm.ES256,
+                    OAuthProfile.JwtAlgorithm.ES384}) {
+                cbJwtAlgorithm.addItem(a);
+            }
+            // Default to RS256 if current was HMAC
+            if (current != null && !current.name().startsWith("H"))
+                cbJwtAlgorithm.setSelectedItem(current);
+            else
+                cbJwtAlgorithm.setSelectedItem(OAuthProfile.JwtAlgorithm.RS256);
+        } else if (isClientSecret) {
+            // Symmetric algorithms only
+            for (OAuthProfile.JwtAlgorithm a : new OAuthProfile.JwtAlgorithm[]{
+                    OAuthProfile.JwtAlgorithm.HS256, OAuthProfile.JwtAlgorithm.HS384,
+                    OAuthProfile.JwtAlgorithm.HS512}) {
+                cbJwtAlgorithm.addItem(a);
+            }
+            // Default to HS256 if current was asymmetric
+            if (current != null && current.name().startsWith("H"))
+                cbJwtAlgorithm.setSelectedItem(current);
+            else
+                cbJwtAlgorithm.setSelectedItem(OAuthProfile.JwtAlgorithm.HS256);
+        }
+    }
+
     private void updateStopRefreshButton() {
         if (selected == null || btnStopRefresh == null) return;
         boolean isAuto   = selected.getRefreshMode() == OAuthProfile.RefreshMode.AUTO_SILENT;
@@ -1155,7 +1195,12 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         return "Client Credentials";
     }
     private static String authLabel(OAuthProfile.ClientAuthMethod m) {
-        return switch (m) { case HTTP_BASIC -> "HTTP Basic"; case POST_BODY -> "POST Body (form fields)"; case PRIVATE_KEY_JWT -> "Private Key JWT"; };
+        return switch (m) {
+            case HTTP_BASIC        -> "HTTP Basic";
+            case POST_BODY         -> "POST Body (form fields)";
+            case PRIVATE_KEY_JWT   -> "Private Key JWT";
+            case CLIENT_SECRET_JWT -> "Client Secret JWT";
+        };
     }
     private static String friendlyError(String raw) {
         if (raw == null) return "Unknown error.";
