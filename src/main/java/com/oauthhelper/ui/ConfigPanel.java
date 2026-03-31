@@ -64,8 +64,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
     private JPanel pnlMonitorBody;
     private JLabel lblScopesLabel;
 
-    private JButton  btnFetch, btnTest, btnCopy, btnStopRefresh, btnSave;
-    private JLabel   lblStatus, lblTtl, lblRefreshStatus;
+    private JButton  btnFetch, btnTest, btnCopy, btnSave;
+    private JLabel   lblStatus, lblTtl;
     private JTextArea taToken;
     private Timer    ttlTimer;
 
@@ -197,7 +197,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         cbAuth.addActionListener(e -> updateVisibility());
         cbJwtAlgorithm = new JComboBox<>(OAuthProfile.JwtAlgorithm.values());
         cbJwtAlgorithm.addActionListener(e -> updateVisibility());
-        spJwtLifetime = new JSpinner(new SpinnerNumberModel(300, 30, 3600, 30));
+        spJwtLifetime = new JSpinner(new SpinnerNumberModel(300, 60, 3600, 30));
 
         cbRefresh = new JComboBox<>(REFRESH_LABELS);
         cbRefresh.setSelectedIndex(1); // default to Auto-Refresh
@@ -232,16 +232,12 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
         lblStatus        = lbl("No token fetched."); lblStatus.setForeground(Color.GRAY);
         lblTtl           = lbl("");
-        lblRefreshStatus = lbl("");
 
         // ── Button declarations ────────────────────────────────────────────────
         btnSave        = btn("Save Settings");
         btnTest        = btn("Test Connection");
         btnFetch       = btn("Get Token");
         btnCopy        = btn("Copy Token");   btnCopy.setVisible(false);
-        btnStopRefresh = btn("Disable Auto-Refresh");
-        btnStopRefresh.setVisible(false);
-        btnStopRefresh.addActionListener(e -> toggleAutoRefresh());
 
         // ── Outer form panel ───────────────────────────────────────────────────
         JPanel form = new JPanel();
@@ -373,7 +369,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         statusBlock.setOpaque(false);
         statusBlock.setAlignmentX(Component.LEFT_ALIGNMENT);
         statusBlock.setBorder(new EmptyBorder(2, 0, 4, 0));
-        for (JLabel l : new JLabel[]{lblStatus, lblTtl, lblRefreshStatus}) {
+        for (JLabel l : new JLabel[]{lblStatus, lblTtl}) {
             l.setAlignmentX(Component.LEFT_ALIGNMENT);
             statusBlock.add(l);
         }
@@ -402,7 +398,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         bottomBtnRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         bottomBtnRow.add(btnFetch);
         bottomBtnRow.add(btnCopy);
-        bottomBtnRow.add(btnStopRefresh);
         form.add(vGap(4));
         form.add(bottomBtnRow);
 
@@ -675,7 +670,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         if (pnlInjectionTools != null) pnlInjectionTools.setVisible(anyInject);
         if (lblScopesLabel != null) lblScopesLabel.setText("Scopes (optional)");
 
-        updateStopRefreshButton();
         formPanel.revalidate();
         formPanel.repaint();
     }
@@ -720,10 +714,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
             lblStatus.setForeground(Color.GRAY);
             taToken.setVisible(false);
             btnCopy.setVisible(false);
-            lblRefreshStatus.setText("");
             lblTtl.setText("");
-            updateStopRefreshButton();
-        }
+            }
     }
 
     private void populate(OAuthProfile p) {
@@ -872,19 +864,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         btnTest.setEnabled(true);
         setStatus("Success!", new Color(0, 130, 0));
         updateTtl();
-        updateRefreshStatus(e);
-        updateStopRefreshButton();
     }
 
-    private void updateRefreshStatus(TokenEntry e) {
-        if (e == null) { lblRefreshStatus.setText(""); return; }
-        if (e.getRefreshToken() != null && !e.getRefreshToken().isBlank()) {
-            lblRefreshStatus.setText("Refresh token: active");
-            lblRefreshStatus.setForeground(new Color(0, 130, 0));
-        } else {
-            lblRefreshStatus.setText("");
-        }
-    }
 
     private void updateTtl() {
         if (selected == null) return;
@@ -901,18 +882,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
                 .setContents(new StringSelection(taToken.getText()), null);
     }
 
-    private void toggleAutoRefresh() {
-        if (selected == null) return;
-        if (tokenManager.isAutoRefreshRunning(selected.getName())) {
-            tokenManager.cancelAutoRefresh(selected.getName());
-            btnStopRefresh.setText("Enable Auto-Refresh");
-            api.logging().logToOutput("[OAuth Helper] Auto-refresh paused for: " + selected.getName());
-        } else {
-            tokenManager.startAutoRefresh(selected);
-            btnStopRefresh.setText("Disable Auto-Refresh");
-            api.logging().logToOutput("[OAuth Helper] Auto-refresh resumed for: " + selected.getName());
-        }
-    }
 
     /**
      * Repopulate the algorithm dropdown with only the algorithms relevant to the
@@ -950,16 +919,6 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         }
     }
 
-    private void updateStopRefreshButton() {
-        if (selected == null || btnStopRefresh == null) return;
-        boolean isAuto   = selected.getRefreshMode() == OAuthProfile.RefreshMode.AUTO_SILENT;
-        boolean hasToken = tokenManager.getToken(selected.getName()) != null;
-        boolean visible  = isAuto && hasToken;
-        btnStopRefresh.setVisible(visible);
-        if (visible) {
-            boolean running = tokenManager.isAutoRefreshRunning(selected.getName());
-            btnStopRefresh.setText(running ? "Disable Auto-Refresh" : "Enable Auto-Refresh");
-        }
     }
 
     private void setStatus(String text, Color color) {
@@ -981,64 +940,13 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
 
     @Override
     public void onRefreshNeeded(OAuthProfile profile) {
-        TokenEntry current = tokenManager.getToken(profile.getName());
-        boolean hasRT = current != null && current.getRefreshToken() != null
-                && !current.getRefreshToken().isBlank();
-        switch (profile.getRefreshMode()) {
-            case AUTO_SILENT -> { if (hasRT) runRefresh(profile, current.getRefreshToken());
-                                  else runFetch(profile, false); }
-            case MANUAL -> {}
+        // Client Credentials cannot use refresh tokens (RFC 6749 §4.4).
+        // Always re-fetch a fresh token using the stored credentials.
+        if (profile.getRefreshMode() == OAuthProfile.RefreshMode.AUTO_SILENT) {
+            runFetch(profile, false);
         }
     }
 
-    private void runRefresh(OAuthProfile profile, String refreshToken) {
-        if (fetchInProgress) return;
-        fetchInProgress = true;
-        Thread w = new Thread(() -> {
-            try {
-                TokenEntry entry = oAuthClient.refreshToken(profile, refreshToken);
-                tokenManager.storeToken(profile, entry);
-                api.logging().logToOutput("[OAuth Helper] Token refreshed via refresh_token: " + profile.getName());
-                SwingUtilities.invokeLater(() -> {
-                    if (selected != null && selected.getName().equals(profile.getName()))
-                        showToken(entry);
-                });
-            } catch (Exception ex) {
-                api.logging().logToOutput("[OAuth Helper] Refresh failed, re-fetching: " + ex.getMessage());
-                try {
-                    TokenEntry entry = oAuthClient.fetchToken(profile);
-                    tokenManager.storeToken(profile, entry);
-                    SwingUtilities.invokeLater(() -> {
-                        if (selected != null && selected.getName().equals(profile.getName()))
-                            showToken(entry);
-                    });
-                } catch (Exception ex2) {
-                    api.logging().logToError("[OAuth Helper] Auto-refresh failed: " + ex2.getMessage());
-                    java.io.StringWriter sw = new java.io.StringWriter();
-                    ex2.printStackTrace(new java.io.PrintWriter(sw));
-                    api.logging().logToError(sw.toString());
-                }
-            } finally {
-                fetchInProgress = false;
-                SwingUtilities.invokeLater(() -> {
-                    if (selected != null && selected.getName().equals(profile.getName())) {
-                        btnFetch.setEnabled(true); btnTest.setEnabled(true);
-                    }
-                });
-            }
-        }, "oauth-refresh") {
-            @Override public void run() {
-                try { super.run(); }
-                catch (Throwable t) {
-                    java.io.StringWriter sw = new java.io.StringWriter();
-                    t.printStackTrace(new java.io.PrintWriter(sw));
-                    api.logging().logToError("[OAuth Helper] Unexpected error in refresh thread: " + sw);
-                }
-            }
-        };
-        w.setDaemon(true);
-        w.start();
-    }
 
     // =========================================================================
     // Load profile from JSON
