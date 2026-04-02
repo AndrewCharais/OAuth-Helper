@@ -98,7 +98,7 @@ The collapsible **Advanced Settings** section contains:
 ## Roadmap
 
 - [ ] Authorization Code + PKCE
-- [ ] OAuth security testing checks (redirect_uri manipulation, token audience bypass, etc.)
+- [ ] OAuth security testing checks 
 
 ---
 
