@@ -215,7 +215,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         spRegenThreshold = new JSpinner(new SpinnerNumberModel(3, 1, 20, 1));
 
         tfScanCodes     = field(); setPlaceholder(tfScanCodes,     "401, 403");
-        tfSessionPhrase = field(); setPlaceholder(tfSessionPhrase, "e.g. invalid_token, session expired");
+        tfSessionPhrase = field(); setPlaceholder(tfSessionPhrase, "invalid_token, session expired");
         tfName          = field();
         tfTokenUrl      = field();
         tfClientId      = field();
@@ -269,15 +269,13 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         form.add(rowSecret);
         form.add(rowPrivateKey);
         rowPrivateKey.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
-        rowJwtAudience = row("JWT Audience", tfJwtAudience,
-                "The audience claim in the JWT assertion. Defaults to the Token URL if blank.\n" +
-                "Keycloak: use the realm URL (e.g. http://host:port/realms/myrealm).\n" +
-                "Other IdPs: use the token endpoint URL.");
+        rowJwtAudience = row("Audience", tfJwtAudience,
+                "The audience claim in the JWT assertion. Defaults to the Token URL if blank.\n");
         form.add(rowJwtAudience);
         rowJwtAlgorithm = row("Signing Algorithm", cbJwtAlgorithm,
                 "RS256/RS384/RS512 for RSA keys. ES256/ES384 for EC (elliptic curve) keys.");
         form.add(rowJwtAlgorithm);
-        rowJwtLifetime = row("Assertion Lifetime (s)", spJwtLifetime,
+        rowJwtLifetime = row("Assertion Lifetime", spJwtLifetime,
                 "How many seconds until the JWT assertion expires. Most IdPs accept 300 (5 min).\n"
                 + "Reduce if your IdP rejects assertions with too long a lifetime.");
         form.add(rowJwtLifetime);
@@ -311,7 +309,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
             pnlInjectionTools.add(row("Header Name", tfHeaderName,
                     "The HTTP request header the token is written into."));
             pnlInjectionTools.add(row("Token Prefix", tfTokenPrefix,
-                    "Text prepended before the token value (e.g. Bearer). Leave blank to inject the raw token."));
+                    "Text prepended before the token value (e.g. Bearer)."));
             body.add(pnlInjectionTools);
 
             body.add(vGap(6));
@@ -329,8 +327,8 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
             pnlMonitorBody.setLayout(new BoxLayout(pnlMonitorBody, BoxLayout.Y_AXIS));
             pnlMonitorBody.setOpaque(false);
             pnlMonitorBody.add(row("Failure Status Codes", tfScanCodes,
-                    "Comma-separated HTTP status codes that indicate authentication failure (e.g. 401, 403). Leave blank to disable."));
-            pnlMonitorBody.add(row("Failure Response Text (optional)", tfSessionPhrase,
+                    "Comma-separated HTTP status codes that indicate a rejected token (401, 403). Leave blank to disable session monitoring."));
+            pnlMonitorBody.add(row("Failure Response Text", tfSessionPhrase,
                     "If this text appears in a response body, it will be treated as a session failure. Leave blank to disable."));
             pnlMonitorBody.add(row("Failures Before Refresh", spRegenThreshold,
                     "Number of consecutive failures before automatically requesting a new token."));
@@ -740,7 +738,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         spRegenThreshold.setValue(p.getRegenThreshold());
 
         String codes = p.getScanCodes();
-        if (codes == null || codes.isBlank()) setPlaceholder(tfScanCodes, "401, 403");
+        if (codes == null || codes.isBlank()) setPlaceholder(tfScanCodes, "e.g. 401, 403");
         else { tfScanCodes.setForeground(UIManager.getColor("TextField.foreground")); tfScanCodes.setText(codes); }
 
         String phrase = p.getSessionPhrase();
@@ -774,7 +772,7 @@ public class ConfigPanel implements TokenManager.TokenChangeListener {
         p.setRefreshMode(indexToMode(cbRefresh.getSelectedIndex()));
         p.setScanEnabled(!tfScanCodes.getForeground().equals(Color.GRAY) || !tfSessionPhrase.getForeground().equals(Color.GRAY));
         String rawCodes = tfScanCodes.getText().trim();
-        p.setScanCodes(tfScanCodes.getForeground().equals(Color.GRAY) ? "401, 403" : rawCodes);
+        p.setScanCodes(tfScanCodes.getForeground().equals(Color.GRAY) ? "" : rawCodes);
         String rawPhrase = tfSessionPhrase.getText().trim();
         p.setSessionPhrase(tfSessionPhrase.getForeground().equals(Color.GRAY) ? "" : rawPhrase);
         p.setRegenEnabled(true);
