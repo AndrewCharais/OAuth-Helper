@@ -58,7 +58,7 @@ public class OAuthProfile {
 
     // Token header scanning / auto-regen
     private boolean scanEnabled    = true;
-    private String  scanCodes      = "401, 403";
+    private String  scanCodes      = "";
     private String  sessionPhrase  = "";
     private boolean regenEnabled   = true;
     private int     regenThreshold = 3;
