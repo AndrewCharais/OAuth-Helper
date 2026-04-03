@@ -13,8 +13,6 @@ Built with the [Montoya API](https://portswigger.github.io/burp-extensions-monto
 3. Re-fetches a new token automatically when the current one expires (if Auto-Refresh is enabled)
 4. Optionally monitors in-scope responses for signs that the token has been rejected and re-fetches when needed — this is disabled by default and configured in Advanced Settings
 
-Multiple profiles let you manage different OAuth clients or environments side by side.
-
 ---
 
 ## Requirements
@@ -68,7 +66,7 @@ openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in private.pem -out priv
 
 Register `cert.pem` with your IdP and paste `private_pkcs8.pem` into the **Private Key (PEM)** field.
 
-The **JWT Audience** field defaults to the Token URL. Some IdPs (e.g. Keycloak) expect the realm issuer URL instead — check your IdP's `/.well-known/openid-configuration` for the correct `issuer` value.
+The **Audience** field defaults to the Token URL. Some IdPs (e.g. Keycloak) expect the realm issuer URL instead — check your IdP's `/.well-known/openid-configuration` for the correct `issuer` value.
 
 ---
 
