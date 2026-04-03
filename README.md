@@ -97,8 +97,7 @@ The **Audience** field defaults to the Token URL. Some IdPs (e.g. Keycloak) expe
 ## Roadmap
 
 - [ ] Authorization Code + PKCE flow
-- [ ] OAuth security testing checks (redirect_uri manipulation, token audience bypass, scope escalation)
-
+- [ ] OAuth security testing checks 
 ---
 
 ## License
@@ -113,4 +112,4 @@ Only use against systems you are authorised to test, whether through ownership, 
 
 ---
 
-Built with AI assistance (Claude by Anthropic) — **Author:** Andrew Charis
+Built with AI assistance (Claude by Anthropic) — **Author:** Andrew Charais
